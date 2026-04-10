@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  /* Paleta de colores Nutri-Tech (Limpio y Profesional) */
+  --background: #F8FAFC; /* Un blanco grisáceo muy suave para descansar la vista */
+  --foreground: #0F172A; /* Un azul marino muy oscuro para lectura clara */
+  
+  /* Colores de marca */
+  --brand-blue: #2563EB;
+  --brand-indigo: #4F46E5;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-brand-primary: var(--brand-blue);
+  --color-brand-secondary: var(--brand-indigo);
+}
+
+/* Forzamos un tema claro constante para la consistencia médica */
+/* Evitamos que el sistema cambie a negro si el usuario tiene Windows en modo oscuro */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  /* Priorizamos la fuente Geist que configuramos en el layout */
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Mejora para los inputs del formulario */
+input, select, textarea {
+  @apply focus:ring-2 focus:ring-blue-500/20 outline-none transition-all;
+}
