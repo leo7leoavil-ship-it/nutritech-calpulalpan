@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     // Intercambio de código por sesión
     await supabase.auth.exchangeCodeForSession(code);
 
-    // Verificación de perfil existente
+    // Obtener datos del usuario
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
@@ -23,18 +23,19 @@ export async function GET(request: Request) {
         .eq('id', user.id)
         .single();
 
-      // Redirección lógica: Nuevo -> Registro | Existente -> Dashboard/Panel
+      // Si no existe perfil o no ha terminado el registro, va a registro-fijo
       if (!perfil || !perfil.registro_completo) {
         return NextResponse.redirect(`${requestUrl.origin}/registro-fijo`);
       }
 
-      const destination = perfil.rol === 'especialista' ? '/(especialista)/panel' : '/dashboard';
-      // Nota: En Next.js App Router, el grupo de ruta (paciente) no va en la URL final
-      const cleanDestination = destination.replace(/\(([^)]+)\)\//, '');
+      // Si ya está registrado, decidir ruta por rol
+      // Nota: Aquí redirigimos a la ruta final, Next.js resuelve los grupos (paciente) internamente
+      const destination = perfil.rol === 'especialista' ? '/panel' : '/dashboard';
       
-      return NextResponse.redirect(`${requestUrl.origin}${cleanDestination}`);
+      return NextResponse.redirect(`${requestUrl.origin}${destination}`);
     }
   }
 
+  // En caso de error o falta de código, volver al login
   return NextResponse.redirect(`${requestUrl.origin}/login`);
 }
