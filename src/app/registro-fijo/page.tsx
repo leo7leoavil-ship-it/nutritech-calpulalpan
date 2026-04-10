@@ -1,16 +1,13 @@
 'use client';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/client';
 import { useRouter } from 'next/navigation';
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 
-// --- 1. Definición de Tipos Estrictos (Cumplimiento de Integridad) ---
-// Define la estructura de los antecedentes familiares para evitar el tipo 'any'
 interface AntecedenteFamiliar {
   padre: boolean;
   madre: boolean;
 }
 
-// Define la estructura completa del estado del formulario
 interface FormDataState {
   curp: string;
   nombre_completo: string;
@@ -19,7 +16,6 @@ interface FormDataState {
   direccion: string;
   ocupacion: string;
   telefono: string;
-  // Antecedentes estructurados
   diabetes: AntecedenteFamiliar;
   obesidad: AntecedenteFamiliar;
   alergias: string;
@@ -27,10 +23,12 @@ interface FormDataState {
 
 export default function RegistroFijo() {
   const router = useRouter();
+  // INICIALIZACIÓN CRÍTICA
+  const supabase = createClient();
+  
   const [loading, setLoading] = useState<boolean>(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // --- 2. Estado Inicial Tipado Correctamente ---
   const [formData, setFormData] = useState<FormDataState>({
     curp: '',
     nombre_completo: '',
@@ -39,7 +37,6 @@ export default function RegistroFijo() {
     direccion: '',
     ocupacion: '',
     telefono: '',
-    // Inicialización explícita de sub-objetos
     diabetes: { padre: false, madre: false },
     obesidad: { padre: false, madre: false },
     alergias: '',
@@ -48,33 +45,30 @@ export default function RegistroFijo() {
   useEffect(() => {
     const getSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserId(user.id);
-      else router.push('/login');
+      if (user) {
+        setUserId(user.id);
+      } else {
+        router.push('/login');
+      }
     };
     getSession();
-  }, [router]);
+  }, [router, supabase]);
 
-  // --- 3. Manejadores de Eventos Tipados ---
-  // Para inputs de texto/select normales
   const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Para checkboxes de antecedentes (la solución a tus errores)
   const handleCheckboxChange = (
     e: ChangeEvent<HTMLInputElement>,
-    parentKey: 'diabetes' | 'obesidad', // Restringe a qué claves del estado aplicar
+    parentKey: 'diabetes' | 'obesidad',
     childKey: 'padre' | 'madre'
   ) => {
     const { checked } = e.target;
     setFormData(prev => ({
       ...prev,
       [parentKey]: {
-        ...prev[parentKey], // Copia el estado previo del antecedente (ej. preserva 'madre' si cambias 'padre')
+        ...prev[parentKey],
         [childKey]: checked
       }
     }));
@@ -86,7 +80,7 @@ export default function RegistroFijo() {
     setLoading(true);
 
     try {
-      // --- 4. Operación Upsert en Perfiles ---
+      // 1. Guardar Perfil Básico
       const { error: errorPerfil } = await supabase.from('perfiles').upsert({
         id: userId,
         curp: formData.curp.toUpperCase().trim(),
@@ -102,11 +96,9 @@ export default function RegistroFijo() {
 
       if (errorPerfil) throw errorPerfil;
 
-      // --- 5. Mapeo Correcto a la Base de Datos ---
-      // Aquí se traduce la estructura del frontend a las columnas de Supabase
+      // 2. Guardar Antecedentes Heredofamiliares
       const { error: errorAnt } = await supabase.from('antecedentes_familiares').upsert({
         perfil_id: userId,
-        // Traducimos: frontend 'formData.diabetes.padre' -> DB 'diabetes_padre'
         diabetes_padre: formData.diabetes.padre,
         diabetes_madre: formData.diabetes.madre,
         obesidad_padre: formData.obesidad.padre,
@@ -116,135 +108,101 @@ export default function RegistroFijo() {
 
       if (errorAnt) throw errorAnt;
 
-      // Redirección al Dashboard tras éxito (RNF-09: Usabilidad)
       router.push('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error salvando datos:', error);
-      alert('Ocurrió un error al guardar tu perfil. Por favor, revisa los datos e intenta de nuevo.');
+      alert(`Error: ${error.message || 'No se pudo guardar el perfil'}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Renderizado (con corrección de 'name' attributes) ---
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-3xl mx-auto bg-white shadow-xl rounded-2xl p-8 border border-gray-100">
-        <header className="mb-8 border-b pb-4">
-          <h1 className="text-2xl font-bold text-blue-900">Expediente de Identificación Único</h1>
-          <p className="text-gray-500 text-sm">Completa tus datos fijos para continuar.</p>
+    <div className="min-h-screen bg-[#F8FAFC] py-12 px-4">
+      <div className="max-w-3xl mx-auto bg-white shadow-2xl rounded-3xl p-8 border border-gray-100">
+        <header className="mb-8 border-b border-gray-100 pb-6 text-center">
+          <h1 className="text-3xl font-bold text-blue-900">Expediente de Identificación</h1>
+          <p className="text-gray-500 mt-2">Bienvenido a Nutri-Tech Calpulalpan. Por favor, completa tu información básica.</p>
         </header>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* SECCIÓN: DATOS DE IDENTIFICACIÓN */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="col-span-1 md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
-              <input 
-                required
-                type="text"
-                name="nombre_completo" // Crítico para handleInputChange
-                value={formData.nombre_completo}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-                onChange={handleInputChange}
-              />
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* SECCIÓN: IDENTIFICACIÓN */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <span className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm">1</span>
+              Datos Personales
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
+                <input required type="text" name="nombre_completo" value={formData.nombre_completo} onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-xl border-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">CURP</label>
+                <input required maxLength={18} type="text" name="curp" value={formData.curp} onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-xl border-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border uppercase" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Fecha de Nacimiento</label>
+                <input required type="date" name="fecha_nacimiento" value={formData.fecha_nacimiento} onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-xl border-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border" />
+              </div>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700">CURP (18 caracteres)</label>
-              <input 
-                required
-                maxLength={18}
-                pattern="^[A-Z]{4}[0-9]{6}[H,M][A-Z]{5}[0-9]{2}$" // Validación básica de CURP
-                type="text"
-                name="curp"
-                value={formData.curp}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border uppercase"
-                onChange={handleInputChange}
-              />
-            </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Sexo</label>
-              <select 
-                name="sexo"
-                value={formData.sexo}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-                onChange={handleInputChange}
-              >
-                <option value="Masculino">Masculino</option>
-                <option value="Femenino">Femenino</option>
-              </select>
+          {/* SECCIÓN: CONTACTO Y OCUPACIÓN */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <span className="w-8 h-8 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-sm">2</span>
+              Contacto y Localización
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Dirección Completa</label>
+                <input required type="text" name="direccion" value={formData.direccion} onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-xl border-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Teléfono</label>
+                <input required type="tel" name="telefono" value={formData.telefono} onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-xl border-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Ocupación</label>
+                <input required type="text" name="ocupacion" value={formData.ocupacion} onChange={handleInputChange}
+                  className="mt-1 block w-full rounded-xl border-gray-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-3 border" />
+              </div>
             </div>
-          </section>
+          </div>
 
-          {/* SECCIÓN: ANTECEDENTES HEREDOFAMILIARES (Corregida) */}
-          <section className="bg-blue-50 p-4 rounded-lg">
-            <h3 className="font-semibold text-blue-800 mb-3 text-sm uppercase tracking-wider">Antecedentes Heredofamiliares</h3>
-            <div className="space-y-4">
-              {/* Diabetes */}
-              <div className="flex items-center justify-between bg-white p-2 rounded border gap-4">
-                <span className="text-sm font-medium text-gray-800">Diabetes</span>
-                <div className="flex gap-4">
-                  <label className="inline-flex items-center text-xs text-gray-600 gap-1">
-                    <input 
-                      type="checkbox" 
-                      checked={formData.diabetes.padre}
-                      className="rounded text-blue-600 focus:ring-blue-500" 
-                      // Llamada corregida con tipos explícitos
-                      onChange={(e) => handleCheckboxChange(e, 'diabetes', 'padre')} 
-                    /> Padre
-                  </label>
-                  <label className="inline-flex items-center text-xs text-gray-600 gap-1">
-                    <input 
-                      type="checkbox" 
-                      checked={formData.diabetes.madre}
-                      className="rounded text-blue-600 focus:ring-blue-500" 
-                      onChange={(e) => handleCheckboxChange(e, 'diabetes', 'madre')} 
-                    /> Madre
-                  </label>
+          {/* SECCIÓN: ANTECEDENTES */}
+          <div className="space-y-4 bg-orange-50/50 p-6 rounded-2xl border border-orange-100">
+            <h3 className="text-lg font-semibold text-orange-800 flex items-center gap-2">
+              <span className="w-8 h-8 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center text-sm">3</span>
+              Antecedentes Heredofamiliares
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm">
+                <span className="text-sm font-bold text-gray-700">Diabetes</span>
+                <div className="flex gap-6">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={formData.diabetes.padre} onChange={(e) => handleCheckboxChange(e, 'diabetes', 'padre')} className="w-5 h-5 rounded border-gray-300 text-blue-600" /> Padre</label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={formData.diabetes.madre} onChange={(e) => handleCheckboxChange(e, 'diabetes', 'madre')} className="w-5 h-5 rounded border-gray-300 text-blue-600" /> Madre</label>
                 </div>
               </div>
-
-              {/* Obesidad (Repetimos estructura corregida) */}
-              <div className="flex items-center justify-between bg-white p-2 rounded border gap-4">
-                <span className="text-sm font-medium text-gray-800">Obesidad</span>
-                <div className="flex gap-4">
-                  <label className="inline-flex items-center text-xs text-gray-600 gap-1">
-                    <input 
-                      type="checkbox" 
-                      checked={formData.obesidad.padre}
-                      className="rounded text-blue-600 focus:ring-blue-500" 
-                      onChange={(e) => handleCheckboxChange(e, 'obesidad', 'padre')} 
-                    /> Padre
-                  </label>
-                  <label className="inline-flex items-center text-xs text-gray-600 gap-1">
-                    <input 
-                      type="checkbox" 
-                      checked={formData.obesidad.madre}
-                      className="rounded text-blue-600 focus:ring-blue-500" 
-                      onChange={(e) => handleCheckboxChange(e, 'obesidad', 'madre')} 
-                    /> Madre
-                  </label>
+              <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow-sm">
+                <span className="text-sm font-bold text-gray-700">Obesidad</span>
+                <div className="flex gap-6">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={formData.obesidad.padre} onChange={(e) => handleCheckboxChange(e, 'obesidad', 'padre')} className="w-5 h-5 rounded border-gray-300 text-blue-600" /> Padre</label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={formData.obesidad.madre} onChange={(e) => handleCheckboxChange(e, 'obesidad', 'madre')} className="w-5 h-5 rounded border-gray-300 text-blue-600" /> Madre</label>
                 </div>
               </div>
             </div>
-          </section>
+          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-400 flex justify-center items-center"
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Guardando perfil clínico...
-              </>
-            ) : 'Finalizar Registro y Entrar'}
+          <button type="submit" disabled={loading}
+            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-200 disabled:bg-gray-300 flex justify-center items-center">
+            {loading ? 'Sincronizando expediente...' : 'Guardar y Continuar'}
           </button>
         </form>
       </div>

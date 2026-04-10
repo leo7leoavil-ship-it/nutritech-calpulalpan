@@ -1,38 +1,62 @@
 'use client';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/client';
 import { LogIn } from 'lucide-react';
+// Eliminamos la constante de aquí afuera
 
 export default function LoginPage() {
+  // Inicializamos el cliente dentro del componente o usamos una referencia estable
+  const supabase = createClient();
+
   const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          // Aseguramos que el callback use la URL correcta de Vercel o Localhost
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error en la autenticación:', error);
+      alert('No se pudo iniciar sesión con Google.');
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-xl shadow-lg border border-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] px-4">
+      <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-2xl shadow-xl border border-gray-100">
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Nutri-Tech Calpulalpan</h2>
-          <p className="mt-2 text-sm text-gray-600">Bienvenido al Sistema de Atención Nutricional</p>
+          {/* Estética alineada al diseño de Calpulalpan */}
+          <h2 className="text-3xl font-bold text-blue-900 tracking-tight">
+            Nutri-Tech <span className="text-blue-500">Calpulalpan</span>
+          </h2>
+          <p className="mt-3 text-sm text-gray-500">
+            Sistema de Atención Nutricional en Línea
+          </p>
         </div>
         
-        <button
-          onClick={handleLogin}
-          className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-        >
-          <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-            <LogIn className="h-5 w-5 text-blue-300 group-hover:text-blue-100" />
-          </span>
-          Iniciar sesión con Google
-        </button>
+        <div className="py-4">
+          <button
+            onClick={handleLogin}
+            className="group relative w-full flex justify-center py-4 px-4 border border-gray-200 text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm"
+          >
+            <span className="absolute left-0 inset-y-0 flex items-center pl-4">
+              {/* Icono de Google simulado o Lucide LogIn */}
+              <LogIn className="h-5 w-5 text-blue-600 group-hover:scale-110 transition-transform" />
+            </span>
+            Continuar con Google
+          </button>
+        </div>
         
-        <p className="text-center text-xs text-gray-400">
-          Uso exclusivo para la comunidad universitaria de Tlaxcala.
-        </p>
+        <div className="text-center space-y-2">
+          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-medium">
+            Acceso Institucional
+          </p>
+          <p className="text-xs text-gray-400">
+            Uso exclusivo para la comunidad universitaria de Tlaxcala.
+          </p>
+        </div>
       </div>
     </div>
   );

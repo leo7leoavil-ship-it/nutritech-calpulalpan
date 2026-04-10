@@ -1,40 +1,41 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/server'
+import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get('code');
+  const { searchParams, origin } = new URL(request.url)
+  const code = searchParams.get('code')
+  
+  // 'next' permite redirigir al usuario a la página donde estaba antes de loguearse
+  const next = searchParams.get('next') ?? '/dashboard'
 
   if (code) {
-    // CORRECCIÓN CLAVE: Pasamos 'cookies' directamente como objeto, 
-    // sin el envoltorio de función () => cookies
-    const supabase = createRouteHandlerClient({ cookies });
+    const supabase = await createClient()
     
-    // Intercambio de código por sesión
-    await supabase.auth.exchangeCodeForSession(code);
+    // Intercambiamos el código de Google por una sesión real
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    
+    if (!exchangeError) {
+      const { data: { user } } = await supabase.auth.getUser()
 
-    // Obtener datos del usuario
-    const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Consultamos si el usuario ya terminó su registro médico
+        const { data: perfil, error: perfilError } = await supabase
+          .from('perfiles')
+          .select('registro_completo')
+          .eq('id', user.id)
+          .single()
 
-    if (user) {
-      const { data: perfil } = await supabase
-        .from('perfiles')
-        .select('registro_completo, rol')
-        .eq('id', user.id)
-        .single();
+        // Si hay error de perfil (no existe) o no ha completado el registro:
+        if (perfilError || !perfil?.registro_completo) {
+          return NextResponse.redirect(`${origin}/registro-fijo`)
+        }
 
-      // Si no hay perfil o registro incompleto -> registro-fijo
-      if (!perfil || !perfil.registro_completo) {
-        return NextResponse.redirect(`${requestUrl.origin}/registro-fijo`);
+        // Si todo está en orden, al Dashboard
+        return NextResponse.redirect(`${origin}${next}`)
       }
-
-      // Si ya existe, decidir ruta por rol
-      const destination = perfil.rol === 'especialista' ? '/panel' : '/dashboard';
-      return NextResponse.redirect(`${requestUrl.origin}${destination}`);
     }
   }
 
-  // Si algo falla, volver al login
-  return NextResponse.redirect(`${requestUrl.origin}/login`);
+  // Si algo falla en el proceso, regresamos al login para reintentar
+  return NextResponse.redirect(`${origin}/login`)
 }

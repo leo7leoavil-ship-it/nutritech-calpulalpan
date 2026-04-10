@@ -1,14 +1,46 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
-import type { NextRequest } from 'next/request';
-import { NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
-  await supabase.auth.getSession();
-  return res;
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          // CORRECCIÓN AQUÍ: Usamos la sintaxis de objeto para Next.js 16
+          cookiesToSet.forEach(({ name, value, options }) =>
+            request.cookies.set({ name, value, ...options })
+          )
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set({ name, value, ...options })
+          )
+        },
+      },
+    }
+  )
+
+  await supabase.auth.getUser()
+
+  return response
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/registro-fijo/:path*', '/panel/:path*', '/nueva-consulta/:path*'],
-};
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}
