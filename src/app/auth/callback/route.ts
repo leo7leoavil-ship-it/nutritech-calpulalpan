@@ -7,24 +7,33 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get('code');
 
   if (code) {
-    const supabase = createRouteHandlerClient({ cookies });
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    
+    // Intercambio de código por sesión
     await supabase.auth.exchangeCodeForSession(code);
 
-    // Verificamos si el usuario ya tiene perfil completo
+    // Verificación de perfil existente
     const { data: { user } } = await supabase.auth.getUser();
-    const { data: perfil } = await supabase
-      .from('perfiles')
-      .select('registro_completo, rol')
-      .eq('id', user?.id)
-      .single();
 
-    if (!perfil || !perfil.registro_completo) {
-      return NextResponse.redirect(`${requestUrl.origin}/registro-fijo`);
+    if (user) {
+      const { data: perfil } = await supabase
+        .from('perfiles')
+        .select('registro_completo, rol')
+        .eq('id', user.id)
+        .single();
+
+      // Redirección lógica: Nuevo -> Registro | Existente -> Dashboard/Panel
+      if (!perfil || !perfil.registro_completo) {
+        return NextResponse.redirect(`${requestUrl.origin}/registro-fijo`);
+      }
+
+      const destination = perfil.rol === 'especialista' ? '/(especialista)/panel' : '/dashboard';
+      // Nota: En Next.js App Router, el grupo de ruta (paciente) no va en la URL final
+      const cleanDestination = destination.replace(/\(([^)]+)\)\//, '');
+      
+      return NextResponse.redirect(`${requestUrl.origin}${cleanDestination}`);
     }
-
-    // Si ya existe, enviamos según su rol
-    const route = perfil.rol === 'especialista' ? '/panel' : '/dashboard';
-    return NextResponse.redirect(`${requestUrl.origin}${route}`);
   }
 
   return NextResponse.redirect(`${requestUrl.origin}/login`);
