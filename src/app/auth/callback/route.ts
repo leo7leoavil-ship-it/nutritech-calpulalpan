@@ -7,34 +7,34 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get('code');
 
   if (code) {
-    // Sintaxis corregida: pasamos el objeto cookies directamente
+    // CORRECCIÓN CLAVE: Pasamos 'cookies' directamente como objeto, 
+    // sin el envoltorio de función () => cookies
     const supabase = createRouteHandlerClient({ cookies });
     
     // Intercambio de código por sesión
     await supabase.auth.exchangeCodeForSession(code);
 
-    // Obtener datos del usuario autenticado
+    // Obtener datos del usuario
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      // Consultar el perfil en la base de datos
       const { data: perfil } = await supabase
         .from('perfiles')
         .select('registro_completo, rol')
         .eq('id', user.id)
         .single();
 
-      // Si el perfil no existe o el registro no está completo -> Registro Fijo
+      // Si no hay perfil o registro incompleto -> registro-fijo
       if (!perfil || !perfil.registro_completo) {
         return NextResponse.redirect(`${requestUrl.origin}/registro-fijo`);
       }
 
-      // Si ya está registrado, redirigir según rol
+      // Si ya existe, decidir ruta por rol
       const destination = perfil.rol === 'especialista' ? '/panel' : '/dashboard';
       return NextResponse.redirect(`${requestUrl.origin}${destination}`);
     }
   }
 
-  // Retorno por defecto al login si algo falla
+  // Si algo falla, volver al login
   return NextResponse.redirect(`${requestUrl.origin}/login`);
 }
