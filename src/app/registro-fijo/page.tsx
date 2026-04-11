@@ -10,8 +10,8 @@ import { useRegistroForm } from './hooks/useRegistroForm';
 
 export default function RegistroFijoPage() {
   // Inicializamos el cliente unificado que ya maneja las cookies
-  const supabase = createClient();
-  
+  const supabase = createClient(); 
+
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);  
   
@@ -46,7 +46,7 @@ export default function RegistroFijoPage() {
     dosis: ''
   });
 
-  // CORRECCIÓN: El useEffect DEBE ir dentro del componente
+  // Monitoreo de sesión para depuración en consola
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -59,24 +59,20 @@ export default function RegistroFijoPage() {
 
     checkAuth();
     return () => subscription.unsubscribe();
-  }, []);
+  }, [supabase]);
 
   // --- PASO 1: GUARDAR PERFIL (IDENTIFICACIÓN) ---
   const handleStep1Submit = async () => {
     setLoading(true);
     try {
-      // Intentamos obtener al usuario de la sesión o del servidor
-      const { data: { session } } = await supabase.auth.getSession();
-      let user: any = session?.user;
+      // Intentamos obtener al usuario de la sesión o del servidor de forma segura
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-      if (!user) {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        user = authUser;
+      if (userError || !user) {
+        throw new Error("Sesión no detectada. Por favor, re-inicia sesión con Google.");
       }
 
-      if (!user) throw new Error("Sesión no detectada. Por favor, re-inicia sesión con Google.");
-
-      // Upsert a la tabla perfiles
+      // Registro/Actualización en la tabla perfiles
       const { error } = await supabase
         .from('perfiles')
         .upsert({
@@ -99,7 +95,7 @@ export default function RegistroFijoPage() {
 
       setStep(2);
     } catch (error: any) {
-      console.error("DEBUG ERROR:", error);
+      console.error("DEBUG ERROR PASO 1:", error);
       alert(error.message);
     } finally {
       setLoading(false);
@@ -110,10 +106,10 @@ export default function RegistroFijoPage() {
   const handleFinalSubmit = async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error("No se detectó una sesión activa.");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No se detectó una sesión activa.");
 
-      const userId = session.user.id;
+      const userId = user.id;
 
       // 1. Guardar Antecedentes Familiares
       const { error: errorFam } = await supabase
@@ -136,7 +132,6 @@ export default function RegistroFijoPage() {
           otros_antecedentes: formData.otros_antecedentes,
           tiene_alergias: formData.tiene_alergias,
           alergias_especificar: formData.alergias_especificar,
-          especificar_alergias: formData.alergias_especificar,
           updated_at: new Date().toISOString()
         }, { onConflict: 'perfil_id' });
 
@@ -157,8 +152,11 @@ export default function RegistroFijoPage() {
 
       if (errorPat) throw new Error(`Error en patológicos: ${errorPat.message}`);
 
-      // 3. Marcar registro completo
-      await supabase.from('perfiles').update({ registro_completo: true }).eq('id', userId);
+      // 3. Marcar registro como completo en el perfil
+      await supabase
+        .from('perfiles')
+        .update({ registro_completo: true })
+        .eq('id', userId);
 
       alert("¡Expediente guardado con éxito!");
       window.location.href = '/dashboard';
@@ -175,9 +173,33 @@ export default function RegistroFijoPage() {
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-8">
         <FormStepper currentStep={step} />
-        {step === 1 && <Step1Identificacion formData={formData} updateFormData={updateFormData} onNext={handleStep1Submit} />}
-        {step === 2 && <Step2Familiares formData={formData} updateFormData={updateFormData} onNext={() => setStep(3)} onPrev={() => setStep(1)} />}
-        {step === 3 && <Step3Patologicos formData={formData} updateFormData={updateFormData} onPrev={() => setStep(2)} onSubmit={handleFinalSubmit} loading={loading} />}
+        
+        {step === 1 && (
+          <Step1Identificacion 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            onNext={handleStep1Submit} 
+          />
+        )}
+        
+        {step === 2 && (
+          <Step2Familiares 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            onNext={() => setStep(3)} 
+            onPrev={() => setStep(1)} 
+          />
+        )}
+
+        {step === 3 && (
+          <Step3Patologicos 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            onPrev={() => setStep(2)} 
+            onSubmit={handleFinalSubmit} 
+            loading={loading} 
+          />
+        )}
       </div>
     </div>
   );
