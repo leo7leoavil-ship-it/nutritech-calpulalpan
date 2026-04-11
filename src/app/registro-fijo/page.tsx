@@ -59,14 +59,16 @@ export default function RegistroFijoPage() {
   const { formData, updateFormData } = useRegistroForm(initialData);
 
   // --- PASO 1: GUARDAR PERFIL (IDENTIFICACIÓN) ---
+  // --- PASO 1: GUARDAR PERFIL (IDENTIFICACIÓN) ---
   const handleStep1Submit = async () => {
     setLoading(true);
     try {
       // 1. Intentamos obtener la sesión activa
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       
-      // 2. Si no hay sesión, intentamos recuperar al usuario directamente
-      let user = session?.user;
+      // 2. Usamos 'any' para evitar que Vercel bloquee el build por nulabilidad
+      let user: any = session?.user;
+
       if (!user) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         user = authUser;
@@ -74,7 +76,7 @@ export default function RegistroFijoPage() {
 
       // 3. Fallo total de autenticación
       if (!user) {
-        throw new Error("Sesión no detectada. Por favor, cierra sesión y vuelve a entrar con Google para refrescar tus credenciales.");
+        throw new Error("Sesión no detectada. Por favor, re-inicia sesión con Google.");
       }
 
       console.log("Usuario autenticado correctamente:", user.id);
@@ -86,7 +88,7 @@ export default function RegistroFijoPage() {
           id: user.id, 
           curp: formData.curp.toUpperCase().trim(),
           nombre_completo: formData.nombre_completo,
-          sexo: formData.sexo, // Importante: Debe ser 'Masculino', 'Femenino' u 'Otro'
+          sexo: formData.sexo, 
           fecha_nacimiento: formData.fecha_nacimiento,
           direccion: formData.direccion,
           ocupacion: formData.ocupacion,
@@ -98,11 +100,9 @@ export default function RegistroFijoPage() {
         });
 
       if (error) {
-        console.error("Error de Supabase:", error);
         if (error.message.includes('perfiles_curp_key')) {
           throw new Error("Esta CURP ya está registrada en otra cuenta.");
         }
-        // Si el error es de permisos (403/RLS), aquí saltará
         throw new Error(`Error de base de datos: ${error.message}`);
       }
 
@@ -114,7 +114,7 @@ export default function RegistroFijoPage() {
       setLoading(false);
     }
   };
-
+  
   // --- PASO FINAL: GUARDAR ANTECEDENTES Y FINALIZAR ---
   const handleFinalSubmit = async () => {
     setLoading(true);
