@@ -93,6 +93,8 @@ export default function Step1Identificacion({ formData, updateFormData, onNext }
             name="telefono"
             value={formData.telefono}
             onChange={handleChange}
+            pattern="[0-9]*" // Solo permite números
+            maxLength={10}   // Limita a 10 dígitos si así lo requiere tu DB
             className="mt-1 p-2 border rounded-md focus:ring-2 focus:ring-green-500 outline-none shadow-sm"
             placeholder="10 dígitos"
           />

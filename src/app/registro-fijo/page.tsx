@@ -21,7 +21,7 @@ export default function RegistroFijoPage() {
   const initialData: RegistroFormData = {
     curp: '',
     nombre_completo: '',
-    sexo: '',
+    sexo: '', // El SQL espera: 'Masculino', 'Femenino' u 'Otro'
     fecha_nacimiento: '',
     direccion: '',
     ocupacion: '',
@@ -51,28 +51,29 @@ export default function RegistroFijoPage() {
 
   const { formData, updateFormData } = useRegistroForm(initialData);
 
-  // --- PASO 1: CREAR/ACTUALIZAR PERFIL (AL DAR CLIC EN SIGUIENTE) ---
+  // --- PASO 1: GUARDAR PERFIL (IDENTIFICACIÓN) ---
   const handleStep1Submit = async () => {
     setLoading(true);
     try {
+      // Obtenemos sesión fresca para evitar "Sesión no válida"
       const { data: { session } } = await supabase.auth.getSession();
-      
-      // Respaldo de sesión (Plan B)
       let user: any = session?.user;
+
       if (!user) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         user = authUser;
       }
 
-      if (!user) throw new Error("Sesión no válida. Por favor, inicia sesión con Google.");
+      if (!user) throw new Error("Sesión no encontrada. Por favor re-inicia sesión con Google.");
 
+      // Sincronización exacta con tabla public.perfiles
       const { error } = await supabase
         .from('perfiles')
         .upsert({
-          id: user.id,
+          id: user.id, // Primary Key
           curp: formData.curp.toUpperCase().trim(),
           nombre_completo: formData.nombre_completo,
-          sexo: formData.sexo, // Debe coincidir con 'Masculino', 'Femenino' u 'Otro'
+          sexo: formData.sexo, // Check constraint: Masculino/Femenino/Otro
           fecha_nacimiento: formData.fecha_nacimiento,
           direccion: formData.direccion,
           ocupacion: formData.ocupacion,
@@ -80,64 +81,74 @@ export default function RegistroFijoPage() {
           email: user.email,
           updated_at: new Date().toISOString()
         }, { 
-          onConflict: 'id' // Si el ID existe, actualiza en lugar de insertar
+          onConflict: 'id' 
         });
 
       if (error) {
-        // Manejo específico para el error de CURP duplicada en otra cuenta
         if (error.message.includes('perfiles_curp_key')) {
-          throw new Error("La CURP ya está registrada en otra cuenta.");
+          throw new Error("Esta CURP ya está registrada en otra cuenta.");
         }
         throw error;
       }
 
       setStep(2);
     } catch (error: any) {
-      console.error("Error en Paso 1:", error);
+      console.error("Error Paso 1:", error);
       alert(`Error en Identificación: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- PASO FINAL: GUARDAR ANTECEDENTES Y COMPLETAR ---
+  // --- PASO FINAL: GUARDAR ANTECEDENTES Y FINALIZAR ---
   const handleFinalSubmit = async () => {
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error("Usuario no autenticado");
+      const user = session?.user;
 
-      const userId = session.user.id;
+      if (!user) throw new Error("No se detectó una sesión activa.");
 
-      // 1. Guardar Antecedentes Familiares (Alineado con esquema SQL)
+      // 1. Guardar Antecedentes Familiares (Sincronización Total con SQL)
       const { error: errorFam } = await supabase
         .from('antecedentes_familiares')
         .upsert({
-          perfil_id: userId,
+          perfil_id: user.id,
+          // --- Booleanos (Diabetes) ---
           diabetes_padre: formData.diabetes_padre,
           diabetes_madre: formData.diabetes_madre,
+          // --- Booleanos (Obesidad) ---
           obesidad_padre: formData.obesidad_padre,
           obesidad_madre: formData.obesidad_madre,
+          // --- Booleanos (Hipertensión) - NUEVOS ---
+          hipertension_padre: formData.hipertension_padre,
+          hipertension_madre: formData.hipertension_madre,
+          // --- Booleanos (Sobrepeso) - NUEVOS ---
+          sobrepeso_padre: formData.sobrepeso_padre,
+          sobrepeso_madre: formData.sobrepeso_madre,
+          // --- Textos y Observaciones ---
           diabetes_observaciones: formData.diabetes_observaciones,
           sobrepeso_observaciones: formData.sobrepeso_observaciones,
           obesidad_observaciones: formData.obesidad_observaciones,
           hipertension_observaciones: formData.hipertension_observaciones,
           colesterol_trigliceridos: formData.colesterol_trigliceridos,
-          tiene_alergias: formData.tiene_alergias,
-          alergias_especificar: formData.alergias_especificar,
           otros_antecedentes: formData.otros_antecedentes,
+          // --- Alergias ---
+          tiene_alergias: formData.tiene_alergias,
+          alergias_especificar: formData.alergias_especificar, // Mapeo directo al SQL
+          especificar_alergias: formData.alergias_especificar, // Respaldo por nombre alterno en SQL
+          // --- Auditoría ---
           updated_at: new Date().toISOString()
         }, { 
-          onConflict: 'perfil_id' // Permite re-enviar el formulario actualizando datos
+          onConflict: 'perfil_id' 
         });
 
-      if (errorFam) throw errorFam;
-
+      if (errorFam) throw new Error(`Error en familiares: ${errorFam.message}`);
       // 2. Guardar Antecedentes Patológicos
       const { error: errorPat } = await supabase
         .from('antecedentes_patologicos')
         .upsert({
-          perfil_id: userId,
+          perfil_id: user.id,
           padece_enfermedad: formData.padece_enfermedad,
           enfermedad_diagnosticada: formData.enfermedad_diagnosticada,
           toma_medicamento: formData.toma_medicamento,
@@ -148,17 +159,15 @@ export default function RegistroFijoPage() {
           onConflict: 'perfil_id' 
         });
 
-      if (errorPat) throw errorPat;
+      if (errorPat) throw new Error(`Error en patológicos: ${errorPat.message}`);
 
-      // 3. Marcar registro como completo en el perfil
-      const { error: errorUpdate } = await supabase
+      // 3. Marcar registro completo en tabla perfiles
+      await supabase
         .from('perfiles')
         .update({ registro_completo: true })
-        .eq('id', userId);
+        .eq('id', user.id);
 
-      if (errorUpdate) throw errorUpdate;
-
-      alert("¡Expediente guardado exitosamente!");
+      alert("¡Expediente guardado con éxito!");
       window.location.href = '/dashboard';
 
     } catch (error: any) {
