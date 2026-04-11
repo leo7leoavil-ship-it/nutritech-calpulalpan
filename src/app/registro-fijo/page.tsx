@@ -1,6 +1,6 @@
 'use client';
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/client';
 import { useEffect, useState } from 'react';
 import FormStepper from './components/FormStepper';
 import Step1Identificacion from './components/Step1Identificacion';
@@ -8,20 +8,10 @@ import Step2Familiares from './components/Step2Familiares';
 import Step3Patologicos from './components/Step3Patologicos';
 import { useRegistroForm } from './hooks/useRegistroForm';
 
-// Configuración del cliente con soporte para PKCE y persistencia
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    auth: {
-      persistSession: true,
-      detectSessionInUrl: true,
-      flowType: 'pkce',
-    }
-  }
-);
-
 export default function RegistroFijoPage() {
+  // Inicializamos el cliente unificado que ya maneja las cookies
+  const supabase = createClient();
+  
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);  
   
