@@ -55,16 +55,23 @@ export default function RegistroFijoPage() {
   const prevStep = () => setStep((prev) => prev - 1);
 
   const handleFinalSubmit = async () => {
-    setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No se encontró sesión de usuario");
+      try {
+      setLoading(true);
+      // 1. Forzar la obtención de la sesión fresca
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error("Sesión no válida o expirada. Por favor, inicia sesión de nuevo.");
+      }
 
-      // 1. Tabla: perfiles (Cambiado a UPSERT para asegurar existencia)
-      const { error: errorPerfil } = await supabase
+      const user = session.user;
+
+      // 2. Primer paso: Crear/Actualizar el Perfil (El Padre)
+      // Usamos select() al final para confirmar que se creó antes de seguir
+      const { data: perfilData, error: errorPerfil } = await supabase
         .from('perfiles')
         .upsert({
-          id: user.id, // ID vinculado a Auth.Users
+          id: user.id, // Vinculación vital con auth.users
           curp: formData.curp,
           nombre_completo: formData.nombre_completo,
           sexo: formData.sexo,
@@ -75,14 +82,18 @@ export default function RegistroFijoPage() {
           email: user.email,
           registro_completo: true,
           updated_at: new Date().toISOString()
-        });
+        })
+        .select();
 
-      if (errorPerfil) throw errorPerfil;
+      if (errorPerfil) {
+        console.error("Error en Perfiles:", errorPerfil);
+        throw new Error(`Error en Perfil: ${errorPerfil.message}`);
+      }
 
-      // 2. Tabla: antecedentes_familiares
-      const { error: errorFam } = await supabase
-        .from('antecedentes_familiares')
-        .upsert({
+      // 3. Segundo paso: Antecedentes (Los Hijos)
+      // Solo se ejecutan si el paso 2 fue exitoso
+      const [resFam, resPat] = await Promise.all([
+        supabase.from('antecedentes_familiares').upsert({
           perfil_id: user.id,
           diabetes_padre: formData.diabetes_padre,
           diabetes_madre: formData.diabetes_madre,
@@ -101,14 +112,8 @@ export default function RegistroFijoPage() {
           alergias_especificar: formData.alergias_especificar,
           otros_antecedentes: formData.otros_antecedentes,
           updated_at: new Date().toISOString()
-        });
-
-      if (errorFam) throw errorFam;
-
-      // 3. Tabla: antecedentes_patologicos
-      const { error: errorPat } = await supabase
-        .from('antecedentes_patologicos')
-        .upsert({
+        }),
+        supabase.from('antecedentes_patologicos').upsert({
           perfil_id: user.id,
           padece_enfermedad: formData.padece_enfermedad,
           enfermedad_diagnosticada: formData.enfermedad_diagnosticada,
@@ -116,16 +121,18 @@ export default function RegistroFijoPage() {
           nombre_medicamento: formData.nombre_medicamento,
           dosis: formData.dosis,
           updated_at: new Date().toISOString()
-        });
+        })
+      ]);
 
-      if (errorPat) throw errorPat;
+      if (resFam.error) throw new Error(`Error Familiares: ${resFam.error.message}`);
+      if (resPat.error) throw new Error(`Error Patológicos: ${resPat.error.message}`);
 
-      alert("¡Registro completado con éxito!");
+      alert("¡Expediente sincronizado con éxito!");
       window.location.href = '/dashboard';
 
     } catch (error: any) {
-      console.error("Error al guardar:", error);
-      alert(`Error al guardar: ${error.message || "No se pudieron guardar los datos"}`);
+      console.error("DEBUG:", error);
+      alert(error.message);
     } finally {
       setLoading(false);
     }
