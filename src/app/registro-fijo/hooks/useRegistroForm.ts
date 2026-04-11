@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { RegistroFormData } from '../page'; // Importamos la interfaz que ya definiste
+import { RegistroFormData } from '../types';
 
 export const useRegistroForm = (initialData: RegistroFormData) => {
   const [formData, setFormData] = useState<RegistroFormData>(initialData);

@@ -2,11 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { useState } from 'react';
-// 1. Importamos el nuevo Hook y el Stepper
 import FormStepper from './components/FormStepper';
-import Step1Identificacion from './components/Step1Identificacion';
-import Step2Familiares from './components/Step2Familiares';
-import Step3Patologicos from './components/Step3Patologicos';
 import { useRegistroForm } from './hooks/useRegistroForm';
 
 const supabase = createClient(
