@@ -57,11 +57,12 @@ export default function RegistroFijoPage() {
   const handleFinalSubmit = async () => {
     setLoading(true);
     try {
-      // --- AJUSTE DE ROBUSTEZ PARA LA SESIÓN ---
+      // 1. Obtención robusta de la sesión (Solución al error de tipos)
       const { data: { session } } = await supabase.auth.getSession();
-      let user = session?.user;
+      
+      // Declaramos user como 'any' temporalmente para evitar el error de asignación null/undefined de TS
+      let user: any = session?.user;
 
-      // Si getSession falla, intentamos getUser (Plan B)
       if (!user) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         user = authUser;
@@ -70,9 +71,8 @@ export default function RegistroFijoPage() {
       if (!user) {
         throw new Error("No se detectó una sesión activa. Por favor, cierra sesión y vuelve a entrar con Google.");
       }
-      // ------------------------------------------
 
-      // 1. Crear/Actualizar el Perfil
+      // 2. Crear/Actualizar el Perfil (El registro "Padre")
       const { error: errorPerfil } = await supabase
         .from('perfiles')
         .upsert({
@@ -92,7 +92,7 @@ export default function RegistroFijoPage() {
 
       if (errorPerfil) throw new Error(`Error en Perfil: ${errorPerfil.message}`);
 
-      // 2. Insertar Antecedentes en paralelo
+      // 3. Insertar Antecedentes en paralelo (Registros "Hijos")
       const [resFam, resPat] = await Promise.all([
         supabase.from('antecedentes_familiares').upsert({
           perfil_id: user.id,
@@ -143,9 +143,33 @@ export default function RegistroFijoPage() {
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-8">
         <FormStepper currentStep={step} />
-        {step === 1 && <Step1Identificacion formData={formData} updateFormData={updateFormData} onNext={nextStep} />}
-        {step === 2 && <Step2Familiares formData={formData} updateFormData={updateFormData} onNext={nextStep} onPrev={prevStep} />}
-        {step === 3 && <Step3Patologicos formData={formData} updateFormData={updateFormData} onPrev={prevStep} onSubmit={handleFinalSubmit} loading={loading} />}
+        
+        {step === 1 && (
+          <Step1Identificacion 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            onNext={nextStep} 
+          />
+        )}
+        
+        {step === 2 && (
+          <Step2Familiares 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            onNext={nextStep} 
+            onPrev={prevStep} 
+          />
+        )}
+
+        {step === 3 && (
+          <Step3Patologicos 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            onPrev={prevStep} 
+            onSubmit={handleFinalSubmit} 
+            loading={loading} 
+          />
+        )}
       </div>
     </div>
   );
