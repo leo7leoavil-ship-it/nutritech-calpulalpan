@@ -55,23 +55,28 @@ export default function RegistroFijoPage() {
   const prevStep = () => setStep((prev) => prev - 1);
 
   const handleFinalSubmit = async () => {
-      try {
-      setLoading(true);
-      // 1. Forzar la obtención de la sesión fresca
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        throw new Error("Sesión no válida o expirada. Por favor, inicia sesión de nuevo.");
+    setLoading(true);
+    try {
+      // --- AJUSTE DE ROBUSTEZ PARA LA SESIÓN ---
+      const { data: { session } } = await supabase.auth.getSession();
+      let user = session?.user;
+
+      // Si getSession falla, intentamos getUser (Plan B)
+      if (!user) {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        user = authUser;
       }
 
-      const user = session.user;
+      if (!user) {
+        throw new Error("No se detectó una sesión activa. Por favor, cierra sesión y vuelve a entrar con Google.");
+      }
+      // ------------------------------------------
 
-      // 2. Primer paso: Crear/Actualizar el Perfil (El Padre)
-      // Usamos select() al final para confirmar que se creó antes de seguir
-      const { data: perfilData, error: errorPerfil } = await supabase
+      // 1. Crear/Actualizar el Perfil
+      const { error: errorPerfil } = await supabase
         .from('perfiles')
         .upsert({
-          id: user.id, // Vinculación vital con auth.users
+          id: user.id,
           curp: formData.curp,
           nombre_completo: formData.nombre_completo,
           sexo: formData.sexo,
@@ -85,13 +90,9 @@ export default function RegistroFijoPage() {
         })
         .select();
 
-      if (errorPerfil) {
-        console.error("Error en Perfiles:", errorPerfil);
-        throw new Error(`Error en Perfil: ${errorPerfil.message}`);
-      }
+      if (errorPerfil) throw new Error(`Error en Perfil: ${errorPerfil.message}`);
 
-      // 3. Segundo paso: Antecedentes (Los Hijos)
-      // Solo se ejecutan si el paso 2 fue exitoso
+      // 2. Insertar Antecedentes en paralelo
       const [resFam, resPat] = await Promise.all([
         supabase.from('antecedentes_familiares').upsert({
           perfil_id: user.id,
@@ -127,7 +128,7 @@ export default function RegistroFijoPage() {
       if (resFam.error) throw new Error(`Error Familiares: ${resFam.error.message}`);
       if (resPat.error) throw new Error(`Error Patológicos: ${resPat.error.message}`);
 
-      alert("¡Expediente sincronizado con éxito!");
+      alert("¡Expediente guardado con éxito!");
       window.location.href = '/dashboard';
 
     } catch (error: any) {
