@@ -1,12 +1,14 @@
 'use client';
 
-import { createClient } from '@supabase/supabase-js'; // <--- Cambiamos esto
+import { createClient } from '@supabase/supabase-js';
 import { useState } from 'react';
+// 1. Importamos el nuevo Hook y el Stepper
+import FormStepper from './components/FormStepper';
 import Step1Identificacion from './components/Step1Identificacion';
 import Step2Familiares from './components/Step2Familiares';
 import Step3Patologicos from './components/Step3Patologicos';
+import { useRegistroForm } from './hooks/useRegistroForm';
 
-// Inicializamos el cliente de Supabase fuera del componente
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -16,9 +18,9 @@ export default function RegistroFijoPage() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);  
   
-  // Estado inicial alineado con tu Diccionario de Datos y Esquema SQL
-  const [formData, setFormData] = useState({
-    // Tabla: perfiles (El id y email se obtienen de la sesión)
+  // 2. Usamos el Hook para manejar el estado inicial
+  // Esto sustituye al anterior useState del formData
+  const { formData, updateFormData } = useRegistroForm({
     curp: '',
     nombre_completo: '',
     sexo: '',
@@ -26,8 +28,6 @@ export default function RegistroFijoPage() {
     direccion: '',
     ocupacion: '',
     telefono: '',
-
-    // Tabla: antecedentes_familiares
     diabetes: false,
     sobrepeso: false,
     obesidad: false,
@@ -37,8 +37,6 @@ export default function RegistroFijoPage() {
     madre: '',
     otros: '',
     especificar_alergias: '',
-
-    // Tabla: antecedentes_patologicos
     enfermedad_diagnosticada: '',
     toma_medicamento: false,
     nombre_medicamento: '',
@@ -48,18 +46,12 @@ export default function RegistroFijoPage() {
   const nextStep = () => setStep((prev) => prev + 1);
   const prevStep = () => setStep((prev) => prev - 1);
 
-  const updateFormData = (newData: any) => {
-    setFormData((prev) => ({ ...prev, ...newData }));
-  };
-
   const handleFinalSubmit = async () => {
     setLoading(true);
     try {
-      // 1. Obtener sesión de Google/Supabase Auth
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No se encontró sesión de usuario");
 
-      // 2. Operación Atómica en tablas (Sincronización de Email automática)
       const { error: errorPerfil } = await supabase
         .from('perfiles')
         .update({
@@ -70,7 +62,7 @@ export default function RegistroFijoPage() {
           direccion: formData.direccion,
           ocupacion: formData.ocupacion,
           telefono: formData.telefono,
-          email: user.email, // Tomado automáticamente de Google
+          email: user.email,
           registro_completo: true,
           updated_at: new Date().toISOString()
         })
@@ -78,7 +70,6 @@ export default function RegistroFijoPage() {
 
       if (errorPerfil) throw errorPerfil;
 
-      // 3. Guardar Antecedentes (Upsert para evitar duplicados)
       const { error: errorFam } = await supabase
         .from('antecedentes_familiares')
         .upsert({
@@ -111,24 +102,10 @@ export default function RegistroFijoPage() {
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-8">
         
-        {/* Indicador de Progreso */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <span className="text-sm font-bold text-green-700 uppercase tracking-wider">
-              Paso {step} de 3
-            </span>
-            <div className="flex space-x-2">
-              {[1, 2, 3].map((s) => (
-                <div 
-                  key={s} 
-                  className={`h-2 w-12 rounded-full transition-all duration-300 ${step >= s ? 'bg-green-500' : 'bg-gray-200'}`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* 3. Reemplazamos el indicador manual por el nuevo componente FormStepper */}
+        <FormStepper currentStep={step} />
 
-        {/* Renderizado de Pasos */}
+        {/* Renderizado de Pasos (se mantiene igual, usando el formData del Hook) */}
         {step === 1 && (
           <Step1Identificacion 
             formData={formData} 
