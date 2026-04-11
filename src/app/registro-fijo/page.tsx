@@ -60,10 +60,11 @@ export default function RegistroFijoPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No se encontró sesión de usuario");
 
-      // 1. Tabla: perfiles
+      // 1. Tabla: perfiles (Cambiado a UPSERT para asegurar existencia)
       const { error: errorPerfil } = await supabase
         .from('perfiles')
-        .update({
+        .upsert({
+          id: user.id, // ID vinculado a Auth.Users
           curp: formData.curp,
           nombre_completo: formData.nombre_completo,
           sexo: formData.sexo,
@@ -74,8 +75,7 @@ export default function RegistroFijoPage() {
           email: user.email,
           registro_completo: true,
           updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+        });
 
       if (errorPerfil) throw errorPerfil;
 
@@ -99,7 +99,8 @@ export default function RegistroFijoPage() {
           colesterol_trigliceridos: formData.colesterol_trigliceridos,
           tiene_alergias: formData.tiene_alergias,
           alergias_especificar: formData.alergias_especificar,
-          otros_antecedentes: formData.otros_antecedentes
+          otros_antecedentes: formData.otros_antecedentes,
+          updated_at: new Date().toISOString()
         });
 
       if (errorFam) throw errorFam;
@@ -113,7 +114,8 @@ export default function RegistroFijoPage() {
           enfermedad_diagnosticada: formData.enfermedad_diagnosticada,
           toma_medicamento: formData.toma_medicamento,
           nombre_medicamento: formData.nombre_medicamento,
-          dosis: formData.dosis
+          dosis: formData.dosis,
+          updated_at: new Date().toISOString()
         });
 
       if (errorPat) throw errorPat;
@@ -122,8 +124,8 @@ export default function RegistroFijoPage() {
       window.location.href = '/dashboard';
 
     } catch (error: any) {
-      console.error("Error al guardar:", error.message);
-      alert("Error al guardar datos.");
+      console.error("Error al guardar:", error);
+      alert(`Error al guardar: ${error.message || "No se pudieron guardar los datos"}`);
     } finally {
       setLoading(false);
     }
