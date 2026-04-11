@@ -57,22 +57,22 @@ export default function RegistroFijoPage() {
   const handleFinalSubmit = async () => {
     setLoading(true);
     try {
-      // 1. Obtención robusta de la sesión (Solución al error de tipos)
+      // 1. Obtención robusta de la sesión
       const { data: { session } } = await supabase.auth.getSession();
-      
-      // Declaramos user como 'any' temporalmente para evitar el error de asignación null/undefined de TS
       let user: any = session?.user;
 
+      // Plan B si la sesión no carga de inmediato
       if (!user) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         user = authUser;
       }
 
       if (!user) {
-        throw new Error("No se detectó una sesión activa. Por favor, cierra sesión y vuelve a entrar con Google.");
+        throw new Error("No se detectó una sesión activa. Por favor, re-inicia sesión con Google.");
       }
 
-      // 2. Crear/Actualizar el Perfil (El registro "Padre")
+      // 2. PRIMER PASO: Crear/Actualizar el Perfil (El registro "Padre")
+      // Importante: Esperamos a que termine antes de seguir para evitar errores de FK
       const { error: errorPerfil } = await supabase
         .from('perfiles')
         .upsert({
@@ -92,9 +92,10 @@ export default function RegistroFijoPage() {
 
       if (errorPerfil) throw new Error(`Error en Perfil: ${errorPerfil.message}`);
 
-      // 3. Insertar Antecedentes en paralelo (Registros "Hijos")
-      const [resFam, resPat] = await Promise.all([
-        supabase.from('antecedentes_familiares').upsert({
+      // 3. SEGUNDO PASO: Insertar Antecedentes Familiares
+      const { error: errorFam } = await supabase
+        .from('antecedentes_familiares')
+        .upsert({
           perfil_id: user.id,
           diabetes_padre: formData.diabetes_padre,
           diabetes_madre: formData.diabetes_madre,
@@ -113,8 +114,14 @@ export default function RegistroFijoPage() {
           alergias_especificar: formData.alergias_especificar,
           otros_antecedentes: formData.otros_antecedentes,
           updated_at: new Date().toISOString()
-        }),
-        supabase.from('antecedentes_patologicos').upsert({
+        });
+
+      if (errorFam) throw new Error(`Error Familiares: ${errorFam.message}`);
+
+      // 4. TERCER PASO: Insertar Antecedentes Patológicos
+      const { error: errorPat } = await supabase
+        .from('antecedentes_patologicos')
+        .upsert({
           perfil_id: user.id,
           padece_enfermedad: formData.padece_enfermedad,
           enfermedad_diagnosticada: formData.enfermedad_diagnosticada,
@@ -122,13 +129,11 @@ export default function RegistroFijoPage() {
           nombre_medicamento: formData.nombre_medicamento,
           dosis: formData.dosis,
           updated_at: new Date().toISOString()
-        })
-      ]);
+        });
 
-      if (resFam.error) throw new Error(`Error Familiares: ${resFam.error.message}`);
-      if (resPat.error) throw new Error(`Error Patológicos: ${resPat.error.message}`);
+      if (errorPat) throw new Error(`Error Patológicos: ${errorPat.message}`);
 
-      alert("¡Expediente guardado con éxito!");
+      alert("¡Expediente sincronizado con éxito!");
       window.location.href = '/dashboard';
 
     } catch (error: any) {
