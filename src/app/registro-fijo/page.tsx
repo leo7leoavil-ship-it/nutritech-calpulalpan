@@ -3,7 +3,51 @@
 import { createClient } from '@supabase/supabase-js';
 import { useState } from 'react';
 import FormStepper from './components/FormStepper';
+import Step1Identificacion from './components/Step1Identificacion';
+import Step2Familiares from './components/Step2Familiares';
+import Step3Patologicos from './components/Step3Patologicos';
 import { useRegistroForm } from './hooks/useRegistroForm';
+
+// Definimos la interfaz aquí mismo para asegurar que TypeScript la reconozca siempre
+export interface RegistroFormData {
+  curp: string;
+  nombre_completo: string;
+  sexo: string;
+  fecha_nacimiento: string; 
+  direccion: string;
+  ocupacion: string;
+  telefono: string;
+  diabetes: boolean;
+  sobrepeso: boolean;
+  obesidad: boolean;
+  hipertension: boolean;
+  alergias: boolean;
+  padre: string;
+  madre: string;
+  otros: string;
+  especificar_alergias: string;
+  enfermedad_diagnosticada: string;
+  toma_medicamento: boolean;
+  nombre_medicamento: string;
+  dosis: string;
+  // Campos adicionales para tu esquema SQL (matrices)
+  diabetes_padre?: boolean;
+  diabetes_madre?: boolean;
+  sobrepeso_padre?: boolean;
+  sobrepeso_madre?: boolean;
+  obesidad_padre?: boolean;
+  obesidad_madre?: boolean;
+  hipertension_padre?: boolean;
+  hipertension_madre?: boolean;
+  diabetes_observaciones?: string;
+  sobrepeso_observaciones?: string;
+  obesidad_observaciones?: string;
+  hipertension_observaciones?: string;
+  colesterol_trigliceridos?: string;
+  tiene_alergias?: boolean;
+  otros_antecedentes?: string;
+  padece_enfermedad?: boolean;
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,9 +58,7 @@ export default function RegistroFijoPage() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);  
   
-  // 2. Usamos el Hook para manejar el estado inicial
-  // Esto sustituye al anterior useState del formData
-  const { formData, updateFormData } = useRegistroForm({
+  const initialData: RegistroFormData = {
     curp: '',
     nombre_completo: '',
     sexo: '',
@@ -36,8 +78,26 @@ export default function RegistroFijoPage() {
     enfermedad_diagnosticada: '',
     toma_medicamento: false,
     nombre_medicamento: '',
-    dosis: ''
-  });
+    dosis: '',
+    diabetes_padre: false,
+    diabetes_madre: false,
+    sobrepeso_padre: false,
+    sobrepeso_madre: false,
+    obesidad_padre: false,
+    obesidad_madre: false,
+    hipertension_padre: false,
+    hipertension_madre: false,
+    diabetes_observaciones: '',
+    sobrepeso_observaciones: '',
+    obesidad_observaciones: '',
+    hipertension_observaciones: '',
+    colesterol_trigliceridos: '',
+    tiene_alergias: false,
+    otros_antecedentes: '',
+    padece_enfermedad: false
+  };
+
+  const { formData, updateFormData } = useRegistroForm(initialData);
 
   const nextStep = () => setStep((prev) => prev + 1);
   const prevStep = () => setStep((prev) => prev - 1);
@@ -48,6 +108,7 @@ export default function RegistroFijoPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No se encontró sesión de usuario");
 
+      // 1. Actualizar Perfil
       const { error: errorPerfil } = await supabase
         .from('perfiles')
         .update({
@@ -66,22 +127,40 @@ export default function RegistroFijoPage() {
 
       if (errorPerfil) throw errorPerfil;
 
+      // 2. Upsert Antecedentes Familiares
       const { error: errorFam } = await supabase
         .from('antecedentes_familiares')
         .upsert({
           perfil_id: user.id,
-          diabetes: formData.diabetes,
-          sobrepeso: formData.sobrepeso,
-          obesidad: formData.obesidad,
-          hipertension: formData.hipertension,
-          alergias: formData.alergias,
-          padre: formData.padre,
-          madre: formData.madre,
-          otros: formData.otros,
-          especificar_alergias: formData.especificar_alergias
+          diabetes_padre: formData.diabetes_padre,
+          diabetes_madre: formData.diabetes_madre,
+          obesidad_padre: formData.obesidad_padre,
+          obesidad_madre: formData.obesidad_madre,
+          alergias_especificar: formData.alergias_especificar,
+          diabetes_observaciones: formData.diabetes_observaciones,
+          sobrepeso_observaciones: formData.sobrepeso_observaciones,
+          obesidad_observaciones: formData.obesidad_observaciones,
+          hipertension_observaciones: formData.hipertension_observaciones,
+          colesterol_trigliceridos: formData.colesterol_trigliceridos,
+          tiene_alergias: formData.tiene_alergias,
+          otros_antecedentes: formData.otros_antecedentes
         });
 
       if (errorFam) throw errorFam;
+
+      // 3. Upsert Antecedentes Patológicos
+      const { error: errorPat } = await supabase
+        .from('antecedentes_patologicos')
+        .upsert({
+          perfil_id: user.id,
+          padece_enfermedad: formData.padece_enfermedad,
+          enfermedad_diagnosticada: formData.enfermedad_diagnosticada,
+          toma_medicamento: formData.toma_medicamento,
+          nombre_medicamento: formData.nombre_medicamento,
+          dosis: formData.dosis
+        });
+
+      if (errorPat) throw errorPat;
 
       alert("¡Registro completado con éxito!");
       window.location.href = '/dashboard';
@@ -98,10 +177,8 @@ export default function RegistroFijoPage() {
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-8">
         
-        {/* 3. Reemplazamos el indicador manual por el nuevo componente FormStepper */}
         <FormStepper currentStep={step} />
 
-        {/* Renderizado de Pasos (se mantiene igual, usando el formData del Hook) */}
         {step === 1 && (
           <Step1Identificacion 
             formData={formData} 
