@@ -51,29 +51,22 @@ export default function RegistroFijoPage() {
 
   const { formData, updateFormData } = useRegistroForm(initialData);
 
-  const nextStep = () => setStep((prev) => prev + 1);
-  const prevStep = () => setStep((prev) => prev - 1);
-
-  const handleFinalSubmit = async () => {
+  // --- 1. GUARDADO DEL PERFIL (SE ACTIVA AL DAR NEXT EN PASO 1) ---
+  const handleStep1Submit = async () => {
     setLoading(true);
     try {
-      // 1. Obtención robusta de la sesión
       const { data: { session } } = await supabase.auth.getSession();
       let user: any = session?.user;
 
-      // Plan B si la sesión no carga de inmediato
       if (!user) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         user = authUser;
       }
 
-      if (!user) {
-        throw new Error("No se detectó una sesión activa. Por favor, re-inicia sesión con Google.");
-      }
+      if (!user) throw new Error("Sesión no encontrada. Por favor re-inicia sesión.");
 
-      // 2. PRIMER PASO: Crear/Actualizar el Perfil (El registro "Padre")
-      // Importante: Esperamos a que termine antes de seguir para evitar errores de FK
-      const { error: errorPerfil } = await supabase
+      // CREAMOS O ACTUALIZAMOS EL PERFIL
+      const { error } = await supabase
         .from('perfiles')
         .upsert({
           id: user.id,
@@ -85,14 +78,31 @@ export default function RegistroFijoPage() {
           ocupacion: formData.ocupacion,
           telefono: formData.telefono,
           email: user.email,
-          registro_completo: true,
           updated_at: new Date().toISOString()
-        })
-        .select();
+        });
 
-      if (errorPerfil) throw new Error(`Error en Perfil: ${errorPerfil.message}`);
+      if (error) throw error;
 
-      // 3. SEGUNDO PASO: Insertar Antecedentes Familiares
+      // Si el perfil se guardó con éxito, avanzamos al siguiente paso
+      setStep(2);
+    } catch (error: any) {
+      console.error("Error Paso 1:", error);
+      alert(`Error al guardar identificación: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- 2. GUARDADO FINAL (ANTECEDENTES) ---
+  const handleFinalSubmit = async () => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+
+      if (!user) throw new Error("Usuario no autenticado");
+
+      // Guardamos Antecedentes Familiares
       const { error: errorFam } = await supabase
         .from('antecedentes_familiares')
         .upsert({
@@ -116,9 +126,9 @@ export default function RegistroFijoPage() {
           updated_at: new Date().toISOString()
         });
 
-      if (errorFam) throw new Error(`Error Familiares: ${errorFam.message}`);
+      if (errorFam) throw errorFam;
 
-      // 4. TERCER PASO: Insertar Antecedentes Patológicos
+      // Guardamos Antecedentes Patológicos
       const { error: errorPat } = await supabase
         .from('antecedentes_patologicos')
         .upsert({
@@ -131,14 +141,19 @@ export default function RegistroFijoPage() {
           updated_at: new Date().toISOString()
         });
 
-      if (errorPat) throw new Error(`Error Patológicos: ${errorPat.message}`);
+      if (errorPat) throw errorPat;
 
-      alert("¡Expediente sincronizado con éxito!");
+      // Marcamos el registro como completo
+      await supabase
+        .from('perfiles')
+        .update({ registro_completo: true })
+        .eq('id', user.id);
+
+      alert("¡Registro guardado exitosamente!");
       window.location.href = '/dashboard';
 
     } catch (error: any) {
-      console.error("DEBUG:", error);
-      alert(error.message);
+      alert(`Error final: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -153,7 +168,7 @@ export default function RegistroFijoPage() {
           <Step1Identificacion 
             formData={formData} 
             updateFormData={updateFormData} 
-            onNext={nextStep} 
+            onNext={handleStep1Submit} // Llama a la función de guardado de perfil
           />
         )}
         
@@ -161,8 +176,8 @@ export default function RegistroFijoPage() {
           <Step2Familiares 
             formData={formData} 
             updateFormData={updateFormData} 
-            onNext={nextStep} 
-            onPrev={prevStep} 
+            onNext={() => setStep(3)} // Solo navegación local
+            onPrev={() => setStep(1)} 
           />
         )}
 
@@ -170,9 +185,9 @@ export default function RegistroFijoPage() {
           <Step3Patologicos 
             formData={formData} 
             updateFormData={updateFormData} 
-            onPrev={prevStep} 
-            onSubmit={handleFinalSubmit} 
-            loading={loading} 
+            onPrev={() => setStep(2)} 
+            onSubmit={handleFinalSubmit} // Cierre del expediente
+            loading={loading}
           />
         )}
       </div>
