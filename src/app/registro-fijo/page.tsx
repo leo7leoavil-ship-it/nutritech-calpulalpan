@@ -11,7 +11,14 @@ import { RegistroFormData } from './types';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      persistSession: true, // Esto guarda la sesión en el navegador
+      autoRefreshToken: true, // Renueva el token automáticamente
+      detectSessionInUrl: true // Ayuda a detectar el login de Google al volver
+    }
+  }
 );
 
 export default function RegistroFijoPage() {
@@ -21,7 +28,7 @@ export default function RegistroFijoPage() {
   const initialData: RegistroFormData = {
     curp: '',
     nombre_completo: '',
-    sexo: '', // El SQL espera: 'Masculino', 'Femenino' u 'Otro'
+    sexo: '',
     fecha_nacimiento: '',
     direccion: '',
     ocupacion: '',
@@ -55,25 +62,31 @@ export default function RegistroFijoPage() {
   const handleStep1Submit = async () => {
     setLoading(true);
     try {
-      // Obtenemos sesión fresca para evitar "Sesión no válida"
-      const { data: { session } } = await supabase.auth.getSession();
-      let user: any = session?.user;
-
+      // 1. Intentamos obtener la sesión activa
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      // 2. Si no hay sesión, intentamos recuperar al usuario directamente
+      let user = session?.user;
       if (!user) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         user = authUser;
       }
 
-      if (!user) throw new Error("Sesión no encontrada. Por favor re-inicia sesión con Google.");
+      // 3. Fallo total de autenticación
+      if (!user) {
+        throw new Error("Sesión no detectada. Por favor, cierra sesión y vuelve a entrar con Google para refrescar tus credenciales.");
+      }
 
-      // Sincronización exacta con tabla public.perfiles
+      console.log("Usuario autenticado correctamente:", user.id);
+
+      // 4. Upsert a la tabla perfiles
       const { error } = await supabase
         .from('perfiles')
         .upsert({
-          id: user.id, // Primary Key
+          id: user.id, 
           curp: formData.curp.toUpperCase().trim(),
           nombre_completo: formData.nombre_completo,
-          sexo: formData.sexo, // Check constraint: Masculino/Femenino/Otro
+          sexo: formData.sexo, // Importante: Debe ser 'Masculino', 'Femenino' u 'Otro'
           fecha_nacimiento: formData.fecha_nacimiento,
           direccion: formData.direccion,
           ocupacion: formData.ocupacion,
@@ -85,16 +98,18 @@ export default function RegistroFijoPage() {
         });
 
       if (error) {
+        console.error("Error de Supabase:", error);
         if (error.message.includes('perfiles_curp_key')) {
           throw new Error("Esta CURP ya está registrada en otra cuenta.");
         }
-        throw error;
+        // Si el error es de permisos (403/RLS), aquí saltará
+        throw new Error(`Error de base de datos: ${error.message}`);
       }
 
       setStep(2);
     } catch (error: any) {
-      console.error("Error Paso 1:", error);
-      alert(`Error en Identificación: ${error.message}`);
+      console.error("DEBUG ERROR:", error);
+      alert(error.message);
     } finally {
       setLoading(false);
     }
