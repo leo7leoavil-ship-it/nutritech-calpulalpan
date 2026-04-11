@@ -29,13 +29,13 @@ export default function RegistroFijoPage() {
     diabetes_padre: false,
     diabetes_madre: false,
     diabetes_observaciones: '',
-    sobrepeso_padre: false,
+    sobrepeso_padre: false, // Nota: Tu SQL no tiene sobrepeso_padre/madre, solo observaciones
     sobrepeso_madre: false,
     sobrepeso_observaciones: '',
     obesidad_padre: false,
     obesidad_madre: false,
     obesidad_observaciones: '',
-    hipertension_padre: false,
+    hipertension_padre: false, // Nota: Tu SQL no tiene hipertension_padre/madre, solo observaciones
     hipertension_madre: false,
     hipertension_observaciones: '',
     colesterol_trigliceridos: '',
@@ -51,74 +51,56 @@ export default function RegistroFijoPage() {
 
   const { formData, updateFormData } = useRegistroForm(initialData);
 
-  // --- 1. GUARDADO PROGRESIVO: PASO 1 (PERFIL) ---
+  // --- PASO 1: CREAR PERFIL ---
   const handleStep1Submit = async () => {
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      let user: any = session?.user;
+      if (!session?.user) throw new Error("Sesión no válida");
 
-      if (!user) {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        user = authUser;
-      }
-
-      if (!user) throw new Error("Sesión no encontrada. Re-inicia sesión.");
-
-      // USAMOS UPSERT CON ON_CONFLICT PARA EVITAR EL ERROR DE DUPLICADO
       const { error } = await supabase
         .from('perfiles')
         .upsert({
-          id: user.id, // Esta es la PK que causaba el error
-          curp: formData.curp,
+          id: session.user.id,
+          curp: formData.curp.toUpperCase().trim(),
           nombre_completo: formData.nombre_completo,
-          sexo: formData.sexo,
+          sexo: formData.sexo, // Debe ser 'Masculino', 'Femenino' u 'Otro'
           fecha_nacimiento: formData.fecha_nacimiento,
           direccion: formData.direccion,
           ocupacion: formData.ocupacion,
           telefono: formData.telefono,
-          email: user.email,
+          email: session.user.email,
           updated_at: new Date().toISOString()
-        }, { 
-          onConflict: 'id' // Le dice a Supabase: "Si el ID ya existe, actualiza"
-        });
+        }, { onConflict: 'id' });
 
       if (error) throw error;
-
       setStep(2);
     } catch (error: any) {
-      console.error("Error Paso 1:", error);
-      alert(`Error: ${error.message}`);
+      alert(`Error en Identificación: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- 2. GUARDADO FINAL: ANTECEDENTES ---
+  // --- PASO FINAL: ANTECEDENTES ---
   const handleFinalSubmit = async () => {
     setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
+      if (!session?.user) throw new Error("Usuario no autenticado");
 
-      if (!user) throw new Error("Usuario no autenticado");
-
-      // Guardar Antecedentes Familiares con upsert
+      // 1. Antecedentes Familiares (Alineado con tu SQL)
       const { error: errorFam } = await supabase
         .from('antecedentes_familiares')
         .upsert({
-          perfil_id: user.id,
+          perfil_id: session.user.id,
           diabetes_padre: formData.diabetes_padre,
           diabetes_madre: formData.diabetes_madre,
-          diabetes_observaciones: formData.diabetes_observaciones,
-          sobrepeso_padre: formData.sobrepeso_padre,
-          sobrepeso_madre: formData.sobrepeso_madre,
-          sobrepeso_observaciones: formData.sobrepeso_observaciones,
           obesidad_padre: formData.obesidad_padre,
           obesidad_madre: formData.obesidad_madre,
+          diabetes_observaciones: formData.diabetes_observaciones,
+          sobrepeso_observaciones: formData.sobrepeso_observaciones,
           obesidad_observaciones: formData.obesidad_observaciones,
-          hipertension_padre: formData.hipertension_padre,
-          hipertension_madre: formData.hipertension_madre,
           hipertension_observaciones: formData.hipertension_observaciones,
           colesterol_trigliceridos: formData.colesterol_trigliceridos,
           tiene_alergias: formData.tiene_alergias,
@@ -129,11 +111,11 @@ export default function RegistroFijoPage() {
 
       if (errorFam) throw errorFam;
 
-      // Guardar Antecedentes Patológicos con upsert
+      // 2. Antecedentes Patológicos (Alineado con tu SQL)
       const { error: errorPat } = await supabase
         .from('antecedentes_patologicos')
         .upsert({
-          perfil_id: user.id,
+          perfil_id: session.user.id,
           padece_enfermedad: formData.padece_enfermedad,
           enfermedad_diagnosticada: formData.enfermedad_diagnosticada,
           toma_medicamento: formData.toma_medicamento,
@@ -144,17 +126,14 @@ export default function RegistroFijoPage() {
 
       if (errorPat) throw errorPat;
 
-      // Finalizar registro
-      await supabase
-        .from('perfiles')
-        .update({ registro_completo: true })
-        .eq('id', user.id);
+      // 3. Marcar registro completo
+      await supabase.from('perfiles').update({ registro_completo: true }).eq('id', session.user.id);
 
       alert("¡Expediente sincronizado con éxito!");
       window.location.href = '/dashboard';
 
     } catch (error: any) {
-      alert(`Error al finalizar: ${error.message}`);
+      alert(`Error al guardar: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -164,33 +143,9 @@ export default function RegistroFijoPage() {
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-8">
         <FormStepper currentStep={step} />
-        
-        {step === 1 && (
-          <Step1Identificacion 
-            formData={formData} 
-            updateFormData={updateFormData} 
-            onNext={handleStep1Submit} 
-          />
-        )}
-        
-        {step === 2 && (
-          <Step2Familiares 
-            formData={formData} 
-            updateFormData={updateFormData} 
-            onNext={() => setStep(3)} 
-            onPrev={() => setStep(1)} 
-          />
-        )}
-
-        {step === 3 && (
-          <Step3Patologicos 
-            formData={formData} 
-            updateFormData={updateFormData} 
-            onPrev={() => setStep(2)} 
-            onSubmit={handleFinalSubmit} 
-            loading={loading}
-          />
-        )}
+        {step === 1 && <Step1Identificacion formData={formData} updateFormData={updateFormData} onNext={handleStep1Submit} />}
+        {step === 2 && <Step2Familiares formData={formData} updateFormData={updateFormData} onNext={() => setStep(3)} onPrev={() => setStep(1)} />}
+        {step === 3 && <Step3Patologicos formData={formData} updateFormData={updateFormData} onPrev={() => setStep(2)} onSubmit={handleFinalSubmit} loading={loading} />}
       </div>
     </div>
   );
