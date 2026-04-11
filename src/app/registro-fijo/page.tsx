@@ -1,15 +1,20 @@
 'use client';
 
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@supabase/supabase-js'; // <--- Cambiamos esto
 import { useState } from 'react';
 import Step1Identificacion from './components/Step1Identificacion';
 import Step2Familiares from './components/Step2Familiares';
 import Step3Patologicos from './components/Step3Patologicos';
 
+// Inicializamos el cliente de Supabase fuera del componente
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
 export default function RegistroFijoPage() {
-  const supabase = createClientComponentClient();
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);  
   
   // Estado inicial alineado con tu Diccionario de Datos y Esquema SQL
   const [formData, setFormData] = useState({
