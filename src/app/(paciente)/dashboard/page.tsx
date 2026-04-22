@@ -10,10 +10,12 @@ import {
   Clock,
   User
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 export default function PatientDashboard() {
   const supabase = createClient();
+  const router = useRouter();
   const [perfil, setPerfil] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -125,13 +127,17 @@ export default function PatientDashboard() {
 
           {/* Grid de Accesos Rápidos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-blue-200 transition-all cursor-pointer group">
+            <button
+              type="button"
+              onClick={() => router.push('/nueva-consulta')}
+              className="text-left bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-blue-200 transition-all cursor-pointer group"
+            >
               <div className="bg-blue-50 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <Calendar size={24}/>
               </div>
               <h4 className="font-bold text-gray-800">Agendar Cita</h4>
               <p className="text-gray-500 text-xs mt-1">Selecciona fecha y hora para tu próxima consulta.</p>
-            </div>
+            </button>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-green-200 transition-all cursor-pointer group">
               <div className="bg-green-50 w-12 h-12 rounded-xl flex items-center justify-center text-green-600 mb-4 group-hover:bg-green-600 group-hover:text-white transition-colors">

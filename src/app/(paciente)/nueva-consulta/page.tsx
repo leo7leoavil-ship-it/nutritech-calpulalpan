@@ -1,6 +1,7 @@
 'use client';
 
 import { createClient } from '@/lib/client';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import FormStepper from './components/FormStepper';
 import Step1Motivo from './components/Step1Motivo';
@@ -12,6 +13,7 @@ import { useNuevaConsultaForm } from './hooks/useNuevaConsultaForm';
 
 export default function NuevaConsultaPage() {
   const supabase = createClient();
+  const router = useRouter();
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -166,7 +168,7 @@ export default function NuevaConsultaPage() {
       if (consultaError) throw new Error(`Error guardando consulta: ${consultaError.message}`);
 
       alert('¡Consulta guardada con éxito!');
-      window.location.href = '/(paciente)/dashboard';
+      router.push('/dashboard');
     } catch (error: any) {
       console.error('Error guardando consulta:', error);
       alert(error?.message || 'Ocurrió un error al guardar la consulta.');
