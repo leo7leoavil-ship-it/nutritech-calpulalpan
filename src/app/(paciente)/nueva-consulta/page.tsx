@@ -78,8 +78,8 @@ export default function NuevaConsultaPage() {
         .single();
 
       if (perfilError) throw new Error(`Error obteniendo perfil: ${perfilError.message}`);
-      const especialistaId = perfil?.aprobado_por;
-      if (!especialistaId) throw new Error('Tu cuenta aún no tiene un especialista asignado (pendiente de aprobación).');
+      const especialistaId = perfil?.aprobado_por || null;
+      //if (!especialistaId) throw new Error('Tu cuenta aún no tiene un especialista asignado (pendiente de aprobación).');
 
       // 1) Insert: antropometría
       const { data: antropometriaRow, error: antropometriaError } = await supabase
