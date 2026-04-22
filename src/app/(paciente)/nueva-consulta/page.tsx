@@ -99,7 +99,7 @@ export default function NuevaConsultaPage() {
           perfil_id: pacienteId,
           peso_kg: pesoKg,
           talla_cm: tallaCm,
-          imc,
+          imc: imc,
         })
         .select('id')
         .single();
