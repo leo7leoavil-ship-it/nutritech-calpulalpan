@@ -70,6 +70,17 @@ export default function NuevaConsultaPage() {
 
       const pacienteId = user.id;
 
+      const pesoKg = Number(formData.peso_kg);
+      const tallaCm = Number(formData.talla_cm);
+      if (!Number.isFinite(pesoKg) || !Number.isFinite(tallaCm) || pesoKg <= 0 || tallaCm <= 0) {
+        throw new Error('Peso y talla deben ser números válidos mayores a 0.');
+      }
+      const tallaM = tallaCm / 100;
+      const imc = pesoKg / (tallaM * tallaM);
+      if (!Number.isFinite(imc)) {
+        throw new Error('No se pudo calcular el IMC con los datos proporcionados.');
+      }
+
       // Obtenemos especialista asignado (aprobado_por) del perfil del paciente
       const { data: perfil, error: perfilError } = await supabase
         .from('perfiles')
@@ -86,8 +97,9 @@ export default function NuevaConsultaPage() {
         .from('consulta_antropometria')
         .insert({
           perfil_id: pacienteId,
-          peso_kg: Number(formData.peso_kg),
-          talla_cm: Number(formData.talla_cm),
+          peso_kg: pesoKg,
+          talla_cm: tallaCm,
+          imc,
         })
         .select('id')
         .single();
