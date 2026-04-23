@@ -13,10 +13,23 @@ import {
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+type ConsultaResumen = {
+  id: string;
+  created_at: string;
+  motivo_consulta: string | null;
+  status: string;
+};
+
+function labelConsultaStatus(status: string) {
+  if (status === 'atendida') return 'Atendida';
+  return 'Pendiente de atención';
+}
+
 export default function PatientDashboard() {
   const supabase = createClient();
   const router = useRouter();
   const [perfil, setPerfil] = useState<any>(null);
+  const [consultas, setConsultas] = useState<ConsultaResumen[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,8 +38,6 @@ export default function PatientDashboard() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Traemos el perfil y sus antecedentes con un solo query (si tienes las relaciones bien)
-        // O por separado para asegurar
         const { data: profileData } = await supabase
           .from('perfiles')
           .select('*')
@@ -34,6 +45,19 @@ export default function PatientDashboard() {
           .single();
 
         setPerfil(profileData);
+
+        const { data: consultasData, error: consultasError } = await supabase
+          .from('consultas')
+          .select('id, created_at, motivo_consulta, status')
+          .eq('paciente_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (consultasError) {
+          console.error('Error cargando consultas:', consultasError);
+          setConsultas([]);
+        } else {
+          setConsultas((consultasData as ConsultaResumen[]) ?? []);
+        }
       } catch (error) {
         console.error("Error cargando dashboard:", error);
       } finally {
@@ -135,8 +159,8 @@ export default function PatientDashboard() {
               <div className="bg-blue-50 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <Calendar size={24}/>
               </div>
-              <h4 className="font-bold text-gray-800">Agendar Cita</h4>
-              <p className="text-gray-500 text-xs mt-1">Selecciona fecha y hora para tu próxima consulta.</p>
+              <h4 className="font-bold text-gray-800">Nueva consulta</h4>
+              <p className="text-gray-500 text-xs mt-1">Responde al formulario de consulta</p>
             </button>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-green-200 transition-all cursor-pointer group">
@@ -154,13 +178,48 @@ export default function PatientDashboard() {
               <h3 className="font-bold text-gray-800 flex items-center gap-2">
                 <Clock className="text-gray-400" size={20}/> Actividad Reciente
               </h3>
+              <p className="text-gray-500 text-xs mt-1">Tus consultas enviadas y el estado de cada una.</p>
             </div>
-            <div className="p-12 text-center">
-              <div className="flex justify-center mb-4">
-                <ClipboardList size={48} className="text-gray-200"/>
+            {consultas.length === 0 ? (
+              <div className="p-12 text-center">
+                <div className="flex justify-center mb-4">
+                  <ClipboardList size={48} className="text-gray-200"/>
+                </div>
+                <p className="text-gray-400 text-sm italic">Aún no tienes consultas registradas.</p>
               </div>
-              <p className="text-gray-400 text-sm italic">Aún no tienes consultas registradas.</p>
-            </div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {consultas.map((c) => {
+                  const fecha = c.created_at
+                    ? new Date(c.created_at).toLocaleString('es-MX', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })
+                    : '';
+                  const atendida = c.status === 'atendida';
+                  return (
+                    <li key={c.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-gray-50/80 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-gray-400 uppercase tracking-wide">{fecha}</p>
+                        <p className="text-sm font-medium text-gray-800 mt-1 line-clamp-2">
+                          {c.motivo_consulta?.trim() || 'Consulta sin motivo indicado'}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                          atendida
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {atendida ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                        {labelConsultaStatus(c.status)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </section>
       </main>

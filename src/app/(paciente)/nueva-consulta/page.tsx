@@ -172,6 +172,7 @@ export default function NuevaConsultaPage() {
           paciente_id: pacienteId,
           especialista_id: especialistaId,
           motivo_consulta: formData.motivo_consulta,
+          status: 'pendiente',
           antropometria_id: antropometriaRow.id,
           evaluacion_dietetica_id: dieteticaRow.id,
           estilo_vida_id: estiloVidaRow.id,
