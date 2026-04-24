@@ -17,7 +17,7 @@ export function PatientDetailPanel({
   familiares: AntecedentesFamiliares | null;
   tab: 'perfil' | 'fisica' | 'r24';
   onTabChange: (tab: 'perfil' | 'fisica' | 'r24') => void;
-  onStartConsulta: () => void;
+  onStartConsulta: () => void | Promise<void>;
 }) {
   const edad = selectedPaciente ? yearsOld(selectedPaciente.fecha_nacimiento) : null;
 
@@ -44,7 +44,7 @@ export function PatientDetailPanel({
         <button
           type="button"
           disabled={!selectedConsulta || !selectedPaciente}
-          onClick={onStartConsulta}
+          onClick={() => void onStartConsulta()}
           className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Iniciar Consulta

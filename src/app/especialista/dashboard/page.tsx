@@ -66,14 +66,29 @@ export default function EspecialistaDashboardPage() {
 
         setEspecialista(perfil as any);
 
-        const { data: consultasData, error: consultasError } = await supabase
+        const { data: rowLista } = await supabase
+          .from('especialistas')
+          .select('perfil_id')
+          .eq('perfil_id', user.id)
+          .maybeSingle();
+
+        const enLista = !!rowLista;
+
+        const base = supabase
           .from('consultas')
           .select(
             'id, created_at, paciente_id, especialista_id, motivo_consulta, status, diagnostico_especialista, plan_alimenticio_resumen, antropometria_id'
           )
-          .eq('especialista_id', user.id)
-          .eq('status', 'pendiente')
-          .order('created_at', { ascending: true });
+          .eq('status', 'pendiente');
+
+        const filtered = enLista
+          ? base
+          : base.or(
+              `especialista_id.is.null,especialista_id.eq.${user.id}`
+            );
+
+        const { data: consultasData, error: consultasError } =
+          await filtered.order('created_at', { ascending: true });
 
         if (consultasError) throw consultasError;
 
@@ -157,28 +172,70 @@ export default function EspecialistaDashboardPage() {
     if (!selectedConsulta) return;
     setSaving(true);
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error('Sesión no válida');
+
+      const patch: Record<string, unknown> = {
+        diagnostico_especialista: payload.diagnostico_especialista || null,
+        plan_alimenticio_resumen: payload.plan_alimenticio_resumen || null,
+        status: 'atendida',
+      };
+      if (!selectedConsulta.especialista_id) {
+        patch.especialista_id = user.id;
+      }
+
       const { error } = await supabase
         .from('consultas')
-        .update({
-          diagnostico_especialista: payload.diagnostico_especialista || null,
-          plan_alimenticio_resumen: payload.plan_alimenticio_resumen || null,
-          status: 'atendida',
-        })
+        .update(patch)
         .eq('id', selectedConsulta.id);
 
       if (error) throw error;
 
       setModalOpen(false);
-      setCola((prev) => prev.filter((c) => c.id !== selectedConsulta.id));
-      setSelectedId((prev) => {
-        const rest = cola.filter((c) => c.id !== selectedConsulta.id);
-        return rest[0]?.id ?? null;
+      setCola((prev) => {
+        const rest = prev.filter((c) => c.id !== selectedConsulta.id);
+        setSelectedId(rest[0]?.id ?? null);
+        return rest;
       });
     } catch (e) {
       console.error(e);
       alert('No se pudo finalizar la consulta.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleStartConsulta = async () => {
+    if (!selectedConsulta) return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (!selectedConsulta.especialista_id) {
+        const { error } = await supabase
+          .from('consultas')
+          .update({ especialista_id: user.id })
+          .eq('id', selectedConsulta.id)
+          .is('especialista_id', null);
+
+        if (!error) {
+          setCola((prev) =>
+            prev.map((c) =>
+              c.id === selectedConsulta.id
+                ? { ...c, especialista_id: user.id }
+                : c
+            )
+          );
+        }
+      }
+      setModalOpen(true);
+    } catch (e) {
+      console.error(e);
+      setModalOpen(true);
     }
   };
 
@@ -212,7 +269,7 @@ export default function EspecialistaDashboardPage() {
               familiares={familiares}
               tab={tab}
               onTabChange={setTab}
-              onStartConsulta={() => setModalOpen(true)}
+              onStartConsulta={handleStartConsulta}
             />
           </section>
         </div>
