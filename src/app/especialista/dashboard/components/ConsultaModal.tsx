@@ -156,7 +156,7 @@ export function ConsultaModal({
             <h2 className="text-xl font-bold text-gray-900 truncate">
               {paciente.nombre_completo || 'Paciente'}
             </h2>
-            <h3 className="text-xl font-bold text-gray-900 truncate">
+            <h3 className="font-mono text-sm uppercase tracking-widest text-gray-600 font-medium truncate">
               {consultaActual.motivo_consulta ?? '—'}
             </h3>
             <p className="text-sm text-gray-500 mt-1">
