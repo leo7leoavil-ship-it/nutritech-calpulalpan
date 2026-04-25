@@ -35,6 +35,7 @@ export function PatientQueue({
           {cola.map((c) => {
             const p = pacientes[c.paciente_id];
             const isActive = c.id === selectedId;
+            const motivo = c.motivo_consulta ?? '—';
             const edad = p ? yearsOld(p.fecha_nacimiento) : null;
             const sexo = p?.sexo || '—';
             const registro = !!p?.registro_completo;
