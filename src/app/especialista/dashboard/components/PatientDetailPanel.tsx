@@ -59,7 +59,9 @@ export function PatientDetailPanel({
         </div>
 
         <div className="mt-5">
-          <p className="text-sm text-gray-500">{selectedConsulta?.motivo_consulta ?? '—'}</p>
+          <p className="text-lg font-bold text-gray-900 truncate">
+            {selectedConsulta?.motivo_consulta ?? '—'}
+          </p>
         </div>
 
         <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
