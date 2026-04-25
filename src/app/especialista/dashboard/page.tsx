@@ -6,10 +6,12 @@ import { ConsultaModal } from './components/ConsultaModal';
 import { PatientDetailPanel } from './components/PatientDetailPanel';
 import { PatientQueue } from './components/PatientQueue';
 import { SpecialistHeader } from './components/SpecialistHeader';
+import { loadConsultaDetalle } from './loadConsultaDetalle';
 import {
   AntecedentesFamiliares,
   AntecedentesPatologicos,
   Consulta,
+  ConsultaFormularioDetalle,
   Perfil,
 } from './types';
 
@@ -30,6 +32,11 @@ export default function EspecialistaDashboardPage() {
   const [historial, setHistorial] = useState<Consulta[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [consultaVistaId, setConsultaVistaId] = useState<string | null>(null);
+  const [detalleByConsulta, setDetalleByConsulta] = useState<
+    Record<string, ConsultaFormularioDetalle>
+  >({});
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
   const selectedConsulta = useMemo(
     () => cola.find((c) => c.id === selectedId) ?? null,
@@ -77,7 +84,7 @@ export default function EspecialistaDashboardPage() {
         const base = supabase
           .from('consultas')
           .select(
-            'id, created_at, paciente_id, especialista_id, motivo_consulta, status, diagnostico_especialista, plan_alimenticio_resumen, antropometria_id'
+            'id, created_at, paciente_id, especialista_id, motivo_consulta, status, diagnostico_especialista, plan_alimenticio_resumen, antropometria_id, evaluacion_dietetica_id, estilo_vida_id, recordatorio_24h_id'
           )
           .eq('status', 'pendiente');
 
@@ -134,7 +141,7 @@ export default function EspecialistaDashboardPage() {
           supabase
             .from('antecedentes_familiares')
             .select(
-              'diabetes_padre, diabetes_madre, obesidad_padre, obesidad_madre, hipertension_padre, hipertension_madre, sobrepeso_padre, sobrepeso_madre, tiene_alergias, alergias_especificar, otros_antecedentes'
+              'diabetes_padre, diabetes_madre, obesidad_padre, obesidad_madre, hipertension_padre, hipertension_madre, sobrepeso_padre, sobrepeso_madre, tiene_alergias, alergias_especificar, otros_antecedentes, diabetes_observaciones, sobrepeso_observaciones, obesidad_observaciones, hipertension_observaciones, colesterol_trigliceridos'
             )
             .eq('perfil_id', pacienteId)
             .maybeSingle(),
@@ -148,7 +155,7 @@ export default function EspecialistaDashboardPage() {
           supabase
             .from('consultas')
             .select(
-              'id, created_at, paciente_id, especialista_id, motivo_consulta, status, diagnostico_especialista, plan_alimenticio_resumen, antropometria_id'
+              'id, created_at, paciente_id, especialista_id, motivo_consulta, status, diagnostico_especialista, plan_alimenticio_resumen, antropometria_id, evaluacion_dietetica_id, estilo_vida_id, recordatorio_24h_id'
             )
             .eq('paciente_id', pacienteId)
             .order('created_at', { ascending: false })
@@ -164,6 +171,38 @@ export default function EspecialistaDashboardPage() {
     };
     loadPatientExtras();
   }, [selectedConsulta?.id, selectedConsulta?.paciente_id, supabase]);
+
+  const vistaEfectivaId = useMemo(() => {
+    if (!selectedConsulta) return null;
+    return consultaVistaId ?? selectedConsulta.id;
+  }, [selectedConsulta, consultaVistaId]);
+
+  useEffect(() => {
+    setConsultaVistaId(null);
+    setDetalleByConsulta({});
+  }, [selectedConsulta?.id]);
+
+  useEffect(() => {
+    if (!modalOpen || !vistaEfectivaId) return;
+    if (detalleByConsulta[vistaEfectivaId]) {
+      return;
+    }
+
+    let cancelled = false;
+    setCargandoDetalle(true);
+    void loadConsultaDetalle(supabase, vistaEfectivaId).then((d) => {
+      if (cancelled) return;
+      if (d) {
+        setDetalleByConsulta((p) => ({ ...p, [vistaEfectivaId]: d }));
+      }
+      if (!cancelled) setCargandoDetalle(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Cargar solo cuando el modal, la consulta visible o el paciente cambia
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, vistaEfectivaId, supabase, selectedConsulta?.id]);
 
   const handleFinalize = async (payload: {
     diagnostico_especialista: string;
@@ -232,9 +271,11 @@ export default function EspecialistaDashboardPage() {
           );
         }
       }
+      setConsultaVistaId(null);
       setModalOpen(true);
     } catch (e) {
       console.error(e);
+      setConsultaVistaId(null);
       setModalOpen(true);
     }
   };
@@ -280,7 +321,16 @@ export default function EspecialistaDashboardPage() {
           open={modalOpen}
           onClose={() => setModalOpen(false)}
           paciente={selectedPaciente}
-          consulta={selectedConsulta}
+          consultaActual={selectedConsulta}
+          consultaVistaId={consultaVistaId}
+          vistaEfectivaId={vistaEfectivaId ?? selectedConsulta.id}
+          onConsultaVistaIdChange={setConsultaVistaId}
+          detalleVista={
+            vistaEfectivaId
+              ? (detalleByConsulta[vistaEfectivaId] ?? null)
+              : null
+          }
+          cargandoDetalle={cargandoDetalle}
           familiares={familiares}
           patologicos={patologicos}
           historial={historial.filter((h) => h.id !== selectedConsulta.id)}

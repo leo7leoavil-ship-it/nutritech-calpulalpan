@@ -1,0 +1,147 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.antecedentes_familiares (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  perfil_id uuid NOT NULL UNIQUE,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  diabetes_padre boolean DEFAULT false,
+  diabetes_madre boolean DEFAULT false,
+  obesidad_padre boolean DEFAULT false,
+  obesidad_madre boolean DEFAULT false,
+  alergias_especificar text,
+  diabetes_observaciones text,
+  sobrepeso_observaciones text,
+  obesidad_observaciones text,
+  hipertension_observaciones text,
+  colesterol_trigliceridos text,
+  tiene_alergias boolean DEFAULT false,
+  otros_antecedentes text,
+  updated_at timestamp with time zone DEFAULT now(),
+  hipertension_padre boolean DEFAULT false,
+  hipertension_madre boolean DEFAULT false,
+  sobrepeso_padre boolean DEFAULT false,
+  sobrepeso_madre boolean DEFAULT false,
+  CONSTRAINT antecedentes_familiares_pkey PRIMARY KEY (id),
+  CONSTRAINT antecedentes_familiares_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.antecedentes_patologicos (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  perfil_id uuid NOT NULL UNIQUE,
+  enfermedad_diagnosticada text,
+  toma_medicamento boolean NOT NULL DEFAULT false,
+  nombre_medicamento text,
+  dosis text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  padece_enfermedad boolean DEFAULT false,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT antecedentes_patologicos_pkey PRIMARY KEY (id),
+  CONSTRAINT antecedentes_patologicos_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.consulta_antropometria (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  perfil_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  peso_kg numeric NOT NULL,
+  talla_cm numeric NOT NULL,
+  imc numeric,
+  CONSTRAINT consulta_antropometria_pkey PRIMARY KEY (id),
+  CONSTRAINT consulta_antropometria_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.consulta_estilo_vida (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  perfil_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  sueno_horas text,
+  sueno_problemas text,
+  actividad_fisica text,
+  ejercicio_frecuencia text,
+  ejercicio_tiempo text,
+  practica_deporte text,
+  tipo_deporte text,
+  frecuencia_deporte text,
+  tiempo_deporte text,
+  CONSTRAINT consulta_estilo_vida_pkey PRIMARY KEY (id),
+  CONSTRAINT consulta_estilo_vida_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.consulta_evaluacion_dietetica (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  perfil_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  comidas_dia text,
+  agua_litros text,
+  nivel_apetito text,
+  hora_max_apetito text,
+  compania_comida_tipo text,
+  compania_comida_detalle text,
+  tiempo_comida_min text,
+  usa_dispositivos boolean DEFAULT false,
+  dispositivos_detalle text,
+  sal_adicional boolean DEFAULT false,
+  preferencias_positivas text,
+  preferencias_negativas text,
+  CONSTRAINT consulta_evaluacion_dietetica_pkey PRIMARY KEY (id),
+  CONSTRAINT consulta_evaluacion_dietetica_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.consulta_recordatorio_24h (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  perfil_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  r24_desayuno text,
+  r24_colacion_manana text,
+  r24_comida text,
+  r24_colacion_tarde text,
+  r24_cena text,
+  r24_extras text,
+  es_dia_tipico text,
+  grasas_frecuentes text,
+  r24_agua_litros text,
+  CONSTRAINT consulta_recordatorio_24h_pkey PRIMARY KEY (id),
+  CONSTRAINT consulta_recordatorio_24h_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.consultas (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  paciente_id uuid NOT NULL,
+  especialista_id uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  motivo_consulta text,
+  diagnostico_especialista text,
+  plan_alimenticio_resumen text,
+  antropometria_id uuid UNIQUE,
+  evaluacion_dietetica_id uuid UNIQUE,
+  estilo_vida_id uuid UNIQUE,
+  recordatorio_24h_id uuid UNIQUE,
+  status text NOT NULL DEFAULT 'pendiente'::text CHECK (status = ANY (ARRAY['pendiente'::text, 'atendida'::text])),
+  CONSTRAINT consultas_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_paciente FOREIGN KEY (paciente_id) REFERENCES public.perfiles(id),
+  CONSTRAINT fk_especialista FOREIGN KEY (especialista_id) REFERENCES public.perfiles(id),
+  CONSTRAINT fk_antropometria FOREIGN KEY (antropometria_id) REFERENCES public.consulta_antropometria(id)
+);
+CREATE TABLE public.especialistas (
+  perfil_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT especialistas_pkey PRIMARY KEY (perfil_id),
+  CONSTRAINT especialistas_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.perfiles (
+  id uuid NOT NULL,
+  curp character varying NOT NULL UNIQUE,
+  nombre_completo text,
+  sexo text CHECK (sexo = ANY (ARRAY['Masculino'::text, 'Femenino'::text, 'Otro'::text])),
+  fecha_nacimiento date,
+  direccion text,
+  ocupacion text,
+  telefono character varying,
+  rol text NOT NULL DEFAULT 'paciente'::text CHECK (rol = ANY (ARRAY['paciente'::text, 'especialista'::text, 'administrador'::text])),
+  estado_aprobacion text NOT NULL DEFAULT 'aprobado'::text CHECK (estado_aprobacion = ANY (ARRAY['pendiente'::text, 'aprobado'::text, 'rechazado'::text])),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  registro_completo boolean DEFAULT false,
+  email text,
+  avatar_url text,
+  fecha_aprobacion timestamp with time zone,
+  aprobado_por uuid,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT perfiles_pkey PRIMARY KEY (id),
+  CONSTRAINT perfiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id),
+  CONSTRAINT perfiles_aprobado_por_fkey FOREIGN KEY (aprobado_por) REFERENCES public.perfiles(id)
+);
