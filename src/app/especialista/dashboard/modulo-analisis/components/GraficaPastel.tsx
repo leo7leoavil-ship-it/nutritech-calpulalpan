@@ -45,7 +45,7 @@ export function GraficaPastel({ data }: GraficaPastelProps) {
             outerRadius={100}
             paddingAngle={2}
             dataKey="value"
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+            label={({ name, percent }: { name?: string; percent?: number }) => name ? `${name} ${((percent || 0) * 100).toFixed(0)}%` : ''}
             labelLine={false}
           >
             {chartData.map((entry, index) => (
@@ -62,7 +62,7 @@ export function GraficaPastel({ data }: GraficaPastelProps) {
               borderRadius: '8px',
               boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
             }}
-            formatter={(value: number) => [`${value}`, 'Valor']}
+            formatter={(value) => [`${value || 0}`, 'Valor']}
           />
           <Legend />
         </PieChart>
