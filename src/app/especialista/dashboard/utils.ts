@@ -16,3 +16,12 @@ export function fmtFecha(fecha: string) {
   });
 }
 
+
+export function generateCSV(data: any[]) {
+  if (data.length === 0) return '';
+  const headers = Object.keys(data[0]).join(',');
+  const rows = data.map(obj => 
+    Object.values(obj).map(val => `"${val}"`).join(',')
+  ).join('\n');
+  return `${headers}\n${rows}`;
+}

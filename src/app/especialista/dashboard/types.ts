@@ -117,3 +117,32 @@ export type ConsultaFormularioDetalle = {
   recordatorio: ConsultaRecordatorio24h | null;
 };
 
+// Expedientes
+
+export interface ExpedienteFilters {
+  nombre?: string;
+  curp?: string;
+  fechaInicio?: string;
+  fechaFin?: string;
+}
+
+export const DEFAULT_FILTERS: ExpedienteFilters = {
+  nombre: '',
+  curp: '',
+  fechaInicio: '',
+  fechaFin: ''
+};
+
+export interface ExpedienteDetalle {
+  id: string;
+  created_at: string;
+  paciente_id: string;
+  nombre_completo: string;
+  curp: string;
+  // Añade aquí los campos de antropometría y detalles de consulta que necesites
+}
+
+export interface ExpedientesResponse {
+  data: ExpedienteDetalle[];
+  count: number;
+}
