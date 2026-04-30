@@ -1,12 +1,11 @@
 /**
  * Cliente de base de datos para el módulo de análisis
- * 
- * Este módulo proporciona las funciones necesarias para obtener
- * datos directamente de Supabase para generar las gráficas de análisis.
- * Ya no depende de AWS Lambda.
+ * * CORRECCIÓN ARQUITECTÓNICA: Se cambia el uso de 'server client' por 'browser client'
+ * para permitir que el módulo de análisis funcione en Client Components sin romper el build.
  */
 
-import { createClient } from '@/lib/server';
+// CAMBIO CRÍTICO: Importamos el cliente de navegador para evitar el error de next/headers
+import { createClient } from '@/lib/client';
 import { getAnalisisDatos } from './db-client';
 import {
   AnalisisData,
@@ -16,17 +15,18 @@ import {
 } from './types';
 
 /**
- * Obtiene datos de análisis直接从 la base de datos
- * 
- * @param params - Parámetros para el análisis
+ * Obtiene datos de análisis directamente de la base de datos
+ * * @param params - Parámetros para el análisis
  * @returns - Datos del análisis
  */
 export async function fetchAnalisis(
   params: AnalisisParams
 ): Promise<AnalisisData> {
   try {
-    const supabase = await createClient();
+    // El cliente de navegador no requiere 'await' en la mayoría de las configuraciones de Supabase SSR
+    const supabase = createClient();
     const datos = await getAnalisisDatos(supabase, params.fechaInicio, params.fechaFin);
+    
     return {
       ...datos,
       ultimoActualizado: new Date().toISOString(),
@@ -36,9 +36,8 @@ export async function fetchAnalisis(
       },
     };
   } catch (dbError) {
-    // Si falla la base de datos, usar datos mock
-    console.warn('Error al obtener datos de DB:', dbError);
-    console.warn('Usando datos de ejemplo.');
+    console.warn('Error al obtener datos de DB en Calpulalpan:', dbError);
+    console.warn('Cargando datos de respaldo (Mock Data).');
     return getMockData(params.tipoGrafica);
   }
 }
@@ -74,13 +73,11 @@ export async function fetchGraficas(
 }
 
 /**
- * Verifica si el servicio de análisis está disponible
- * Ahora siempre retorna true ya que no dependemos de Lambda externo
+ * Verifica el estado de la conexión con la base de datos
  */
 export async function checkLambdaHealth(): Promise<boolean> {
   try {
-    const supabase = await createClient();
-    // Simple verificación de conexión
+    const supabase = createClient();
     const { error } = await supabase.from('perfiles').select('id').limit(1);
     return !error;
   } catch {
@@ -91,8 +88,6 @@ export async function checkLambdaHealth(): Promise<boolean> {
 // ============================================
 // DATOS DE EJEMPLO (MOCK DATA)
 // ============================================
-// Estos datos se usan cuando no hay conexión al Lambda
-
 function getMockData(tipos: TipoGrafica[]): AnalisisData {
   const metricas: MetricaGeneral[] = [
     { titulo: 'Total Pacientes', valor: 156, cambio: 12.5, tendencia: 'up' },
