@@ -223,41 +223,49 @@ export default function EspecialistaDashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* SECCIÓN MODIFICADA: Header con botón de Análisis */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <SpecialistHeader especialista={especialista} />
-          <button
-            onClick={handleNavigateToAnalisis}
-            className="inline-flex items-center px-4 py-2 bg-white border border-emerald-600 text-emerald-700 font-semibold rounded-lg shadow-sm hover:bg-emerald-50 transition-colors duration-200"
-          >
-            <ChartBarIcon />
-            Análisis de Datos Salud Pública
-          </button>
-        </div>
+    <div className="max-w-7xl mx-auto px-6 py-8">
+      {/* HEADER PRINCIPAL */}
+      <SpecialistHeader especialista={especialista} />
 
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <aside className="lg:col-span-4">
-            <PatientQueue
-              cola={cola}
-              pacientes={pacientes}
-              selectedId={selectedId}
-              onSelect={(id) => setSelectedId(id)}
-            />
-          </aside>
-
-          <section className="lg:col-span-8">
-            <PatientDetailPanel
-              selectedConsulta={selectedConsulta}
-              selectedPaciente={selectedPaciente}
-              familiares={familiares}
-              tab={tab}
-              onTabChange={setTab}
-              onStartConsulta={handleStartConsulta}
-            />
-          </section>
-        </div>
+      {/* NUEVA SECCIÓN DE ACCESO RÁPIDO (Debajo del Header) */}
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={handleNavigateToAnalisis}
+          className="group relative inline-flex items-center px-8 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-md hover:bg-emerald-700 hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 ease-in-out"
+        >
+          <ChartBarIcon />
+          <span className="text-lg">Análisis de Salud Pública Calpulalpan</span>
+          
+          {/* Un pequeño detalle de brillo para llamar más la atención */}
+          <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+        </button>
       </div>
+
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <aside className="lg:col-span-4">
+          <PatientQueue
+            cola={cola}
+            pacientes={pacientes}
+            selectedId={selectedId}
+            onSelect={(id) => setSelectedId(id)}
+          />
+        </aside>
+
+        <section className="lg:col-span-8">
+          <PatientDetailPanel
+            selectedConsulta={selectedConsulta}
+            selectedPaciente={selectedPaciente}
+            familiares={familiares}
+            tab={tab}
+            onTabChange={setTab}
+            onStartConsulta={handleStartConsulta}
+          />
+        </section>
+      </div>
+    </div>
 
       {selectedConsulta && selectedPaciente ? (
         <ConsultaModal
