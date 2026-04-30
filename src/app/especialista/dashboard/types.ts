@@ -117,7 +117,7 @@ export type ConsultaFormularioDetalle = {
   recordatorio: ConsultaRecordatorio24h | null;
 };
 
-// Expedientes
+// === SECCIÓN DE EXPEDIENTES OPTIMIZADA ===
 
 export interface ExpedienteFilters {
   nombre?: string;
@@ -133,13 +133,21 @@ export const DEFAULT_FILTERS: ExpedienteFilters = {
   fechaFin: ''
 };
 
+/**
+ * ExpedienteDetalle debe ser una composición de los datos del perfil 
+ * y el detalle técnico de la consulta para evitar errores de desestructuración.
+ */
 export interface ExpedienteDetalle {
-  id: string;
+  id: string; // ID de la consulta
   created_at: string;
   paciente_id: string;
+  // Datos del Perfil (Aplanados para el Data Grid)
   nombre_completo: string;
   curp: string;
-  // Añade aquí los campos de antropometría y detalles de consulta que necesites
+  
+  // Objeto de detalle para la vista expandida (Modal/Detail)
+  // Al usar el tipo ya existente, aseguramos consistencia en todo el dashboard
+  detalle: ConsultaFormularioDetalle; 
 }
 
 export interface ExpedientesResponse {
