@@ -1,46 +1,37 @@
 /**
- * Utilidades del servidor para la consulta de Expedientes
+ * Utilidades del servidor para la consulta de Expedientes - Nutri-Tech Calpulalpan
  * 
- * Maneja la lógica de paginación, filtrado y seguridad del lado del servidor.
+ * ESTATUS: Corregido para Build de Vercel.
+ * Lógica: Server-Side Rendering (SSR) con Supabase.
  */
 
 import { createClient } from '@/lib/server';
 import type { Consulta, Perfil } from '../types';
 import type {
-    ExpedienteDetalle,
-    ExpedienteFilters,
-    ExpedienteRow,
-    ExpedientesResponse
+  ExpedienteDetalle,
+  ExpedienteFilters,
+  ExpedienteRow,
+  ExpedientesResponse
 } from './types';
 
-/**
- * Constantes de configuración
- */
 const MAX_PAGE_SIZE = 100;
-const DEFAULT_PAGE_SIZE = 10;
 
 /**
- * Valida que el usuario tenga rol de especialista
- * @throws Error si el usuario no es especialista
+ * Valida que el usuario tenga rol de especialista (RNF-04: Seguridad RLS)
  */
 async function validateEspecialista(): Promise<Perfil> {
-  const supabase = await createClient();
+  const supabase = await createClient(); // CORRECCIÓN: await requerido
   
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error('No autenticado');
-  }
+  if (!user) throw new Error('No autenticado');
 
   const { data: perfil, error: perfilError } = await supabase
     .from('perfiles')
-    .select('id, nombre_completo, curp, sexo, fecha_nacimiento, direccion, ocupacion, telefono, registro_completo, rol')
+    .select('*')
     .eq('id', user.id)
     .single();
 
-  if (perfilError || !perfil) {
-    throw new Error('Perfil no encontrado');
-  }
-
+  if (perfilError || !perfil) throw new Error('Perfil no encontrado');
   if (perfil.rol !== 'especialista') {
     throw new Error('Acceso denegado: se requiere rol de especialista');
   }
@@ -49,101 +40,45 @@ async function validateEspecialista(): Promise<Perfil> {
 }
 
 /**
- * Construye la consulta base con filtros de búsqueda
- */
-function buildBaseQuery(
-  supabase: ReturnType<typeof createClient>,
-  filters: ExpedienteFilters
-) {
-  let query = supabase
-    .from('consultas')
-    .select(`
-      id, created_at, paciente_id, especialista_id, motivo_consulta, 
-      status, diagnostico_especialista, plan_alimenticio_resumen, 
-      antropometria_id, evaluacion_dietetica_id, estilo_vida_id, recordatorio_24h_id
-    `, { count: 'exact' });
-
-  // Filtro por rango de fechas
-  if (filters.fechaInicio) {
-    query = query.gte('created_at', filters.fechaInicio);
-  }
-  if (filters.fechaFin) {
-    // Agregar un día para incluir todo el día final
-    const fechaFin = new Date(filters.fechaFin);
-    fechaFin.setDate(fechaFin.getDate() + 1);
-    query = query.lt('created_at', fechaFin.toISOString());
-  }
-
-  // Filtro por status (opcional - por defecto trae todos)
-  // query = query.eq('status', 'atendida'); // Descomentar si se quiere filtrar por status
-
-  return query;
-}
-
-/**
- * Obtiene los IDs de pacientes que coinciden con la búsqueda
- * CRÍTICO: Filtro estricto por rol 'paciente'
+ * Obtiene IDs de pacientes (Búsqueda optimizada por CURP/Nombre)
  */
 async function searchPacienteIds(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any, // Cliente ya resuelto
   search: string
 ): Promise<string[]> {
-  if (!search || search.length < 2) {
-    return [];
-  }
+  if (!search || search.length < 2) return [];
 
-  const searchLower = search.toLowerCase();
-  
-  // Búsqueda por CURP o nombre, SOLO de pacientes
   const { data: pacientes, error } = await supabase
     .from('perfiles')
     .select('id')
-    .eq('rol', 'paciente')  // RESTRICCIÓN CRÍTICA: Solo pacientes
-    .or(`curp.ilike.%${searchLower}%,nombre_completo.ilike.%${searchLower}%`)
+    .eq('rol', 'paciente')
+    .or(`curp.ilike.%${search}%,nombre_completo.ilike.%${search}%`)
     .limit(100);
 
-  if (error) {
-    console.error('Error buscando pacientes:', error);
-    return [];
-  }
-
-  return pacientes?.map(p => p.id) ?? [];
+  if (error) return [];
+  return pacientes?.map((p: any) => p.id) ?? [];
 }
 
 /**
- * Consulta paginada de expedientes
- * 
- * @param filters - Filtros de búsqueda y paginación
- * @returns ExpedientesResponse con los datos y metadatos de paginación
+ * Consulta paginada de expedientes (Sprint 2: Gestión de Consultas)
  */
 export async function getExpedientes(filters: ExpedienteFilters): Promise<ExpedientesResponse> {
-  // 1. Validar que el usuario es especialista
   await validateEspecialista();
-
-  const supabase = await createClient();
+  const supabase = await createClient(); // CORRECCIÓN: await requerido
   
-  // 2. Normalizar parámetros de paginación
-  const pageSize = Math.min(Math.max(1, filters.pageSize), MAX_PAGE_SIZE);
-  const page = Math.max(0, filters.page);
+  const pageSize = Math.min(Math.max(1, filters.pageSize || 10), MAX_PAGE_SIZE);
+  const page = Math.max(0, filters.page || 0);
   const offset = page * pageSize;
 
-  // 3. Si hay búsqueda, obtener IDs de pacientes primero
   let pacienteIds: string[] | null = null;
   if (filters.search && filters.search.length >= 2) {
     pacienteIds = await searchPacienteIds(supabase, filters.search);
-    // Si no hay resultados en la búsqueda, retornar vacío
     if (pacienteIds.length === 0) {
-      return {
-        data: [],
-        total: 0,
-        page,
-        pageSize,
-        totalPages: 0,
-      };
+      return { data: [], total: 0, page, pageSize, totalPages: 0 };
     }
   }
 
-  // 4. Construir consulta base
+  // Construcción de Query Base
   let query = supabase
     .from('consultas')
     .select(`
@@ -152,61 +87,42 @@ export async function getExpedientes(filters: ExpedienteFilters): Promise<Expedi
       antropometria_id, evaluacion_dietetica_id, estilo_vida_id, recordatorio_24h_id
     `, { count: 'exact' });
 
-  // 5. Aplicar filtros
-  if (filters.fechaInicio) {
-    query = query.gte('created_at', filters.fechaInicio);
-  }
+  if (filters.fechaInicio) query = query.gte('created_at', filters.fechaInicio);
   if (filters.fechaFin) {
     const fechaFin = new Date(filters.fechaFin);
     fechaFin.setDate(fechaFin.getDate() + 1);
     query = query.lt('created_at', fechaFin.toISOString());
   }
 
-  // Aplicar filtro de pacientes si existe búsqueda
   if (pacienteIds && pacienteIds.length > 0) {
     query = query.in('paciente_id', pacienteIds);
   }
 
-  // 6. Obtener total antes de aplicar paginación
-  const { count } = await query;
-  const total = count ?? 0;
-
-  // 7. Aplicar orden y paginación
-  const { data: consultasData, error: consultasError } = await query
+  const { data: consultasData, count, error: consultasError } = await query
     .order('created_at', { ascending: false })
     .range(offset, offset + pageSize - 1);
 
-  if (consultasError) {
-    console.error('Error consultando expedientes:', consultasError);
-    throw new Error('Error al consultar expedientes');
-  }
+  if (consultasError) throw new Error('Error al consultar expedientes');
 
   const consultas = (consultasData as Consulta[]) ?? [];
+  const total = count ?? 0;
 
-  // 8. Obtener datos de pacientes
-  const uniquePacienteIds = [...new Set(consultas.map(c => c.paciente_id))];
+  // Hidratación de datos de pacientes (Evitar N+1 queries)
+  const uniqueIds = [...new Set(consultas.map(c => c.paciente_id))];
   let pacientesMap: Record<string, Perfil> = {};
 
-  if (uniquePacienteIds.length > 0) {
-    // CRÍTICO: Filtrar solo perfiles de pacientes
-    const { data: pacientesData, error: pacientesError } = await supabase
+  if (uniqueIds.length > 0) {
+    const { data: pData } = await supabase
       .from('perfiles')
       .select('id, nombre_completo, curp, sexo, fecha_nacimiento, direccion, ocupacion, telefono, registro_completo')
-      .in('id', uniquePacienteIds)
-      .eq('rol', 'paciente');  // RESTRICCIÓN CRÍTICA: Solo pacientes
+      .in('id', uniqueIds)
+      .eq('rol', 'paciente');
 
-    if (pacientesError) {
-      console.error('Error consultando pacientes:', pacientesError);
-    } else {
-      pacientesData?.forEach((p) => {
-        pacientesMap[p.id] = p as Perfil;
-      });
-    }
+    pData?.forEach((p: any) => { pacientesMap[p.id] = p as Perfil; });
   }
 
-  // 9. Construir filas de resultados
   const data: ExpedienteRow[] = consultas
-    .filter(c => pacientesMap[c.paciente_id]) // Filtrar solo consultas con paciente válido
+    .filter(c => pacientesMap[c.paciente_id])
     .map(consulta => ({
       consulta,
       paciente: pacientesMap[consulta.paciente_id],
@@ -222,85 +138,49 @@ export async function getExpedientes(filters: ExpedienteFilters): Promise<Expedi
 }
 
 /**
- * Obtiene el detalle completo de un expediente
- * 
- * @param consultaId - ID de la consulta
- * @returns ExpedienteDetalle con todos los datos relacionados
+ * Detalle completo del expediente (Alineado a Esquema_DB.txt)
  */
 export async function getExpedienteDetalle(consultaId: string): Promise<ExpedienteDetalle | null> {
-  // 1. Validar que el usuario es especialista
   await validateEspecialista();
+  const supabase = await createClient(); // CORRECCIÓN: await requerido
 
-  const supabase = await createClient();
-
-  // 2. Obtener la consulta
-  const { data: consultaData, error: consultaError } = await supabase
+  const { data: consulta, error: cErr } = await supabase
     .from('consultas')
-    .select(`
-      id, created_at, paciente_id, especialista_id, motivo_consulta, 
-      status, diagnostico_especialista, plan_alimenticio_resumen, 
-      antropometria_id, evaluacion_dietetica_id, estilo_vida_id, recordatorio_24h_id
-    `)
+    .select('*')
     .eq('id', consultaId)
     .maybeSingle();
 
-  if (consultaError || !consultaData) {
-    console.error('Error obteniendo consulta:', consultaError);
-    return null;
-  }
+  if (cErr || !consulta) return null;
 
-  const consulta = consultaData as Consulta;
-
-  // 3. Obtener datos del paciente (solo si es paciente)
-  const { data: pacienteData, error: pacienteError } = await supabase
+  const { data: paciente } = await supabase
     .from('perfiles')
-    .select('id, nombre_completo, curp, sexo, fecha_nacimiento, direccion, ocupacion, telefono, registro_completo')
+    .select('*')
     .eq('id', consulta.paciente_id)
-    .eq('rol', 'paciente')  // RESTRICCIÓN CRÍTICA
+    .eq('rol', 'paciente')
     .maybeSingle();
 
-  if (pacienteError || !pacienteData) {
-    console.error('Error obteniendo paciente:', pacienteError);
-    return null;
-  }
+  if (!paciente) return null;
 
-  const paciente = pacienteData as Perfil;
-
-  // 4. Cargar datos relacionados en paralelo
-  const [antropometria, evaluacion, estilo, recordatorio] = await Promise.all([
-    consulta.antropometria_id
-      ? supabase.from('consulta_antropometria').select('*').eq('id', consulta.antropometria_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    consulta.evaluacion_dietetica_id
-      ? supabase.from('consulta_evaluacion_dietetica').select('*').eq('id', consulta.evaluacion_dietetica_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    consulta.estilo_vida_id
-      ? supabase.from('consulta_estilo_vida').select('*').eq('id', consulta.estilo_vida_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    consulta.recordatorio_24h_id
-      ? supabase.from('consulta_recordatorio_24h').select('*').eq('id', consulta.recordatorio_24h_id).maybeSingle()
-      : Promise.resolve({ data: null }),
+  // Carga paralela para optimizar RNF-02 (Latencia < 300ms)
+  const [antro, diet, style, rec24] = await Promise.all([
+    consulta.antropometria_id ? supabase.from('consulta_antropometria').select('*').eq('id', consulta.antropometria_id).maybeSingle() : { data: null },
+    consulta.evaluacion_dietetica_id ? supabase.from('consulta_evaluacion_dietetica').select('*').eq('id', consulta.evaluacion_dietetica_id).maybeSingle() : { data: null },
+    consulta.estilo_vida_id ? supabase.from('consulta_estilo_vida').select('*').eq('id', consulta.estilo_vida_id).maybeSingle() : { data: null },
+    consulta.recordatorio_24h_id ? supabase.from('consulta_recordatorio_24h').select('*').eq('id', consulta.recordatorio_24h_id).maybeSingle() : { data: null },
   ]);
 
   return {
-    consulta,
-    paciente,
-    antropometria: antropometria.data as any,
-    evaluacion: evaluacion.data as any,
-    estilo: estilo.data as any,
-    recordatorio: recordatorio.data as any,
+    consulta: consulta as Consulta,
+    paciente: paciente as Perfil,
+    antropometria: antro.data,
+    evaluacion: diet.data,
+    estilo: style.data,
+    recordatorio: rec24.data,
   };
 }
 
-/**
- * Genera datos CSV para exportación
- * 
- * @param data - Datos de expedientes a exportar
- * @returns string en formato CSV
- */
 export function generateCSV(data: ExpedienteRow[]): string {
-  const headers = ['Nombre Completo', 'CURP', 'Fecha de Consulta', 'Estado', 'Motivo de Consulta'];
-  
+  const headers = ['Nombre', 'CURP', 'Fecha', 'Estado', 'Motivo'];
   const rows = data.map(row => [
     row.paciente.nombre_completo || '',
     row.paciente.curp || '',
@@ -309,10 +189,5 @@ export function generateCSV(data: ExpedienteRow[]): string {
     row.consulta.motivo_consulta || '',
   ]);
 
-  const csvContent = [
-    headers.join(','),
-    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-  ].join('\n');
-
-  return csvContent;
+  return [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
 }
