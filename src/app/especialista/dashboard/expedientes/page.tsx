@@ -7,7 +7,7 @@ import {
     ExpedienteDetalle,
     ExpedienteFilters,
     ExpedientesResponse
-} from '../types';
+} from './types';
 import { generateCSV } from '../utils';
 
 // Iconos SVG en línea
