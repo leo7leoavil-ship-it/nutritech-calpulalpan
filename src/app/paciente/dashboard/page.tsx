@@ -3,17 +3,18 @@
 import { createClient } from '@/lib/client';
 import {
   Activity,
-  AlertCircle,
-  Calendar,
   CheckCircle2,
   ClipboardList,
   Clock,
+  FileDown, // Icono para el botón de descarga
+  Loader2,
   LogOut,
-  User,
+  User
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+// Tipado original
 type ConsultaResumen = {
   id: string;
   created_at: string;
@@ -29,16 +30,22 @@ function labelConsultaStatus(status: string) {
 export default function PatientDashboard() {
   const supabase = createClient();
   const router = useRouter();
+  
+  // Estados originales preservados
   const [perfil, setPerfil] = useState<any>(null);
   const [consultas, setConsultas] = useState<ConsultaResumen[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Estado para manejar la carga individual de cada PDF
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // URL de tu API Gateway de AWS Lambda
+  const AWS_LAMBDA_URL = 'https://5n9fv3460m.execute-api.us-east-2.amazonaws.com/default/generador-pdf-nutritech';
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const { data: profileData } = await supabase
@@ -49,158 +56,141 @@ export default function PatientDashboard() {
 
         setPerfil(profileData);
 
-        const { data: consultasData, error: consultasError } = await supabase
+        const { data: consultasData } = await supabase
           .from('consultas')
           .select('id, created_at, motivo_consulta, status')
           .eq('paciente_id', user.id)
           .order('created_at', { ascending: false });
 
-        if (consultasError) {
-          console.error('Error cargando consultas:', consultasError);
-          setConsultas([]);
-        } else {
-          setConsultas((consultasData as ConsultaResumen[]) ?? []);
-        }
+        setConsultas(consultasData || []);
       } catch (error) {
-        console.error('Error cargando dashboard:', error);
+        console.error('Error al cargar datos:', error);
       } finally {
         setLoading(false);
       }
     };
 
     fetchUserData();
-  }, [supabase]);
+  }, [supabase, router]);
 
-  if (loading)
+  /**
+   * Manejador de descarga de PDF corregido para producción
+   */
+  const handleDownloadPDF = async (consultaId: string) => {
+    setDownloadingId(consultaId);
+    try {
+      // Consulta real a Supabase uniendo antropometría y especialista
+      const { data: cData, error } = await supabase
+        .from('consultas')
+        .select(`
+          id, motivo_consulta, diagnostico, plan_sugerido, created_at,
+          consulta_antropometria (peso, estatura, imc),
+          especialistas (perfiles (nombre_completo, telefono))
+        `)
+        .eq('id', consultaId)
+        .single();
+
+      if (error || !cData) throw new Error("Datos no encontrados");
+
+      // Casteo a any para que Vercel no falle con los arrays de las relaciones
+      const rawData = cData as any;
+      const antro = Array.isArray(rawData.consulta_antropometria) ? rawData.consulta_antropometria[0] : rawData.consulta_antropometria;
+      const esp = Array.isArray(rawData.especialistas) ? rawData.especialistas[0] : rawData.especialistas;
+
+      const payload = {
+        consulta_id: rawData.id,
+        nombre_completo: perfil?.nombre_completo || "Paciente",
+        curp: perfil?.curp || "N/A",
+        email: perfil?.email || "N/A",
+        sexo: perfil?.sexo || "N/A",
+        fecha_emision: new Date(rawData.created_at).toLocaleDateString('es-MX'),
+        peso: antro?.peso || "N/A",
+        estatura: antro?.estatura || "N/A",
+        imc: antro?.imc || "N/A",
+        especialista_nombre: esp?.perfiles?.nombre_completo || "Especialista Nutri-Tech",
+        especialista_tel: esp?.perfiles?.telefono || "S/N",
+        motivo_consulta: rawData.motivo_consulta || "Consulta General",
+        diagnostico: rawData.diagnostico || "Pendiente",
+        plan_sugerido: rawData.plan_sugerido || "Consultar especialista"
+      };
+
+      const response = await fetch(AWS_LAMBDA_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      const linkSource = `data:application/pdf;base64,${result.body}`;
+      const downloadLink = document.createElement("a");
+      downloadLink.href = linkSource;
+      downloadLink.download = `Ficha_Nutricional_${consultaId}.pdf`;
+      downloadLink.click();
+
+    } catch (err) {
+      console.error("Error PDF:", err);
+      alert("Error al generar el PDF");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="animate-spin text-blue-600" size={40} />
       </div>
     );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
-      <header className="bg-white border-b shadow-sm p-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">
-              Bienvenido, {perfil?.nombre_completo?.split(' ')[0] || 'Paciente'}
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-blue-600 p-2 rounded-lg">
+              <Activity className="text-white" size={20} />
+            </div>
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-800">
+              Nutri-Tech
             </h1>
-            <p className="text-gray-500 text-sm">
-              Panel de control de salud nutricional
-            </p>
           </div>
-
-          <div
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
-              perfil?.estado_aprobacion === 'aprobado'
-                ? 'bg-green-100 text-green-700'
-                : 'bg-yellow-100 text-yellow-700'
-            }`}
-          >
-            {perfil?.estado_aprobacion === 'aprobado' ? (
-              <CheckCircle2 size={18} />
-            ) : (
-              <Clock size={18} />
-            )}
-            {perfil?.estado_aprobacion === 'aprobado'
-              ? 'Perfil Verificado'
-              : 'Aprobación Pendiente'}
-          </div>
-
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              router.push('/login');
-            }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+          <button 
+            onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
+            className="flex items-center gap-2 text-gray-500 hover:text-red-600 transition-colors text-sm font-medium"
           >
             <LogOut size={18} />
-            Cerrar sesión
+            <span className="hidden sm:inline">Cerrar Sesión</span>
           </button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full gap-8 grid grid-cols-1 lg:grid-cols-3">
+        {/* Lado Izquierdo: Perfil */}
         <section className="lg:col-span-1 space-y-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <User className="text-blue-600" size={20} /> Datos Personales
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-gray-500 text-sm">CURP</span>
-                <span className="font-medium text-sm">{perfil?.curp}</span>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 h-24"></div>
+            <div className="px-6 pb-6">
+              <div className="relative -mt-12 mb-4">
+                <div className="h-24 w-24 rounded-2xl bg-white p-1 shadow-md mx-auto">
+                  <div className="h-full w-full rounded-xl bg-gray-100 flex items-center justify-center text-blue-600">
+                    <User size={40} />
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-gray-500 text-sm">Sexo</span>
-                <span className="font-medium text-sm">{perfil?.sexo}</span>
-              </div>
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-gray-500 text-sm">Teléfono</span>
-                <span className="font-medium text-sm">{perfil?.telefono}</span>
+              <div className="text-center">
+                <h2 className="text-xl font-bold text-gray-900">{perfil?.nombre_completo}</h2>
+                <p className="text-sm text-gray-500 mb-4">{perfil?.email}</p>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+                  CURP: {perfil?.curp}
+                </div>
               </div>
             </div>
-          </div>
-
-          <div className="bg-blue-600 text-white p-6 rounded-2xl shadow-md">
-            <h3 className="font-bold flex items-center gap-2">
-              <Activity size={20} /> Resumen de Salud
-            </h3>
-            <p className="text-blue-100 text-sm mt-2">
-              Próximamente verás aquí tus gráficas de IMC y peso.
-            </p>
-            <button className="mt-4 w-full bg-white text-blue-600 py-2 rounded-xl text-sm font-bold hover:bg-blue-50 transition-colors">
-              Ver Historial Completo
-            </button>
           </div>
         </section>
 
+        {/* Lado Derecho: Actividad Reciente */}
         <section className="lg:col-span-2 space-y-6">
-          {perfil?.estado_aprobacion === 'pendiente' && (
-            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 items-start">
-              <AlertCircle
-                className="text-amber-600 shrink-0"
-                size={20}
-              />
-              <div>
-                <h4 className="font-bold text-amber-800 text-sm">
-                  Cuenta en revisión
-                </h4>
-                <p className="text-amber-700 text-xs mt-1">
-                  Tu expediente está siendo revisado por un especialista. Podrás
-                  agendar citas una vez que seas aprobado.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => router.push('/nueva-consulta')}
-              className="text-left bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-blue-200 transition-all cursor-pointer group"
-            >
-              <div className="bg-blue-50 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                <Calendar size={24} />
-              </div>
-              <h4 className="font-bold text-gray-800">Nueva consulta</h4>
-              <p className="text-gray-500 text-xs mt-1">
-                Responde al formulario de consulta
-              </p>
-            </button>
-
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-green-200 transition-all cursor-pointer group">
-              <div className="bg-green-50 w-12 h-12 rounded-xl flex items-center justify-center text-green-600 mb-4 group-hover:bg-green-600 group-hover:text-white transition-colors">
-                <ClipboardList size={24} />
-              </div>
-              <h4 className="font-bold text-gray-800">Mi Plan</h4>
-              <p className="text-gray-500 text-xs mt-1">
-                Revisa tu dieta personalizada y recomendaciones.
-              </p>
-            </div>
-          </div>
-
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-6 border-b">
               <h3 className="font-bold text-gray-800 flex items-center gap-2">
@@ -239,24 +229,37 @@ export default function PatientDashboard() {
                           {fecha}
                         </p>
                         <p className="text-sm font-medium text-gray-800 mt-1 line-clamp-2">
-                          {c.motivo_consulta?.trim() ||
-                            'Consulta sin motivo indicado'}
+                          {c.motivo_consulta?.trim() || 'Consulta sin motivo indicado'}
                         </p>
                       </div>
-                      <span
-                        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                          atendida
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {atendida ? (
-                          <CheckCircle2 size={14} />
-                        ) : (
-                          <Clock size={14} />
+                      
+                      {/* Contenedor de Status y Botón */}
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                            atendida ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {atendida ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                          {labelConsultaStatus(c.status)}
+                        </span>
+
+                        {/* Botón de PDF: Solo visible si está atendida */}
+                        {atendida && (
+                          <button
+                            onClick={() => handleDownloadPDF(c.id)}
+                            disabled={downloadingId === c.id}
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                          >
+                            {downloadingId === c.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <FileDown size={14} />
+                            )}
+                            {downloadingId === c.id ? 'Cargando...' : 'PDF'}
+                          </button>
                         )}
-                        {labelConsultaStatus(c.status)}
-                      </span>
+                      </div>
                     </li>
                   );
                 })}
@@ -268,4 +271,3 @@ export default function PatientDashboard() {
     </div>
   );
 }
-
