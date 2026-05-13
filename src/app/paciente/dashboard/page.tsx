@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * PatientDashboard Component
+ * * Este componente representa el panel principal para el paciente.
+ * Maneja la visualización del perfil del usuario, el estado de aprobación
+ * y el historial de consultas médicas/nutricionales.
+ */
+
 import { createClient } from '@/lib/client';
 import {
   Activity,
@@ -14,6 +21,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+// Definición de tipos para las consultas
 type ConsultaResumen = {
   id: string;
   created_at: string;
@@ -21,6 +29,10 @@ type ConsultaResumen = {
   status: string;
 };
 
+/**
+ * Función auxiliar para formatear el estado de la consulta
+ * @param status - El string de estado proveniente de la base de datos
+ */
 function labelConsultaStatus(status: string) {
   if (status === 'atendida') return 'Atendida';
   return 'Pendiente de atención';
@@ -29,18 +41,29 @@ function labelConsultaStatus(status: string) {
 export default function PatientDashboard() {
   const supabase = createClient();
   const router = useRouter();
-  const [perfil, setPerfil] = useState<any>(null);
-  const [consultas, setConsultas] = useState<ConsultaResumen[]>([]);
-  const [loading, setLoading] = useState(true);
 
+  // --- Estados del Componente ---
+  const [perfil, setPerfil] = useState<any>(null); // Datos del perfil del usuario
+  const [consultas, setConsultas] = useState<ConsultaResumen[]>([]); // Lista de consultas del paciente
+  const [loading, setLoading] = useState(true); // Estado de carga inicial
+
+  /**
+   * Efecto para cargar los datos iniciales del usuario y sus consultas
+   */
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        // 1. Obtener la sesión del usuario actual
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        if (!user) return;
+        
+        if (!user) {
+          // Si no hay usuario, se podría redirigir a login aquí
+          return;
+        }
 
+        // 2. Consultar información del perfil en la tabla 'perfiles'
         const { data: profileData } = await supabase
           .from('perfiles')
           .select('*')
@@ -49,6 +72,7 @@ export default function PatientDashboard() {
 
         setPerfil(profileData);
 
+        // 3. Consultar historial de consultas ordenadas por fecha (más reciente primero)
         const { data: consultasData, error: consultasError } = await supabase
           .from('consultas')
           .select('id, created_at, motivo_consulta, status')
@@ -64,13 +88,14 @@ export default function PatientDashboard() {
       } catch (error) {
         console.error('Error cargando dashboard:', error);
       } finally {
-        setLoading(false);
+        setLoading(false); // Finalizar estado de carga
       }
     };
 
     fetchUserData();
   }, [supabase]);
 
+  // Pantalla de carga (Skeleton o Spinner)
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -80,6 +105,7 @@ export default function PatientDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-12">
+      {/* --- Header del Dashboard --- */}
       <header className="bg-white border-b shadow-sm p-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -91,6 +117,7 @@ export default function PatientDashboard() {
             </p>
           </div>
 
+          {/* Badge de estado de aprobación del perfil */}
           <div
             className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
               perfil?.estado_aprobacion === 'aprobado'
@@ -108,6 +135,7 @@ export default function PatientDashboard() {
               : 'Aprobación Pendiente'}
           </div>
 
+          {/* Botón de Logout */}
           <button
             onClick={async () => {
               await supabase.auth.signOut();
@@ -122,6 +150,8 @@ export default function PatientDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* --- Columna Lateral: Información Personal --- */}
         <section className="lg:col-span-1 space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -143,6 +173,7 @@ export default function PatientDashboard() {
             </div>
           </div>
 
+          {/* Placeholder para futuras métricas de salud */}
           <div className="bg-blue-600 text-white p-6 rounded-2xl shadow-md">
             <h3 className="font-bold flex items-center gap-2">
               <Activity size={20} /> Resumen de Salud
@@ -156,17 +187,15 @@ export default function PatientDashboard() {
           </div>
         </section>
 
+        {/* --- Columna Principal: Acciones y Actividad --- */}
         <section className="lg:col-span-2 space-y-6">
+          
+          {/* Alerta de cuenta pendiente de revisión */}
           {perfil?.estado_aprobacion === 'pendiente' && (
             <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 items-start">
-              <AlertCircle
-                className="text-amber-600 shrink-0"
-                size={20}
-              />
+              <AlertCircle className="text-amber-600 shrink-0" size={20} />
               <div>
-                <h4 className="font-bold text-amber-800 text-sm">
-                  Cuenta en revisión
-                </h4>
+                <h4 className="font-bold text-amber-800 text-sm">Cuenta en revisión</h4>
                 <p className="text-amber-700 text-xs mt-1">
                   Tu expediente está siendo revisado por un especialista. Podrás
                   agendar citas una vez que seas aprobado.
@@ -175,6 +204,7 @@ export default function PatientDashboard() {
             </div>
           )}
 
+          {/* Tarjetas de Acciones Rápidas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               type="button"
@@ -185,9 +215,7 @@ export default function PatientDashboard() {
                 <Calendar size={24} />
               </div>
               <h4 className="font-bold text-gray-800">Nueva consulta</h4>
-              <p className="text-gray-500 text-xs mt-1">
-                Responde al formulario de consulta
-              </p>
+              <p className="text-gray-500 text-xs mt-1">Responde al formulario de consulta</p>
             </button>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-green-200 transition-all cursor-pointer group">
@@ -195,12 +223,11 @@ export default function PatientDashboard() {
                 <ClipboardList size={24} />
               </div>
               <h4 className="font-bold text-gray-800">Mi Plan</h4>
-              <p className="text-gray-500 text-xs mt-1">
-                Revisa tu dieta personalizada y recomendaciones.
-              </p>
+              <p className="text-gray-500 text-xs mt-1">Revisa tu dieta personalizada y recomendaciones.</p>
             </div>
           </div>
 
+          {/* --- Lista de Actividad Reciente (Consultas) --- */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-6 border-b">
               <h3 className="font-bold text-gray-800 flex items-center gap-2">
@@ -210,6 +237,8 @@ export default function PatientDashboard() {
                 Tus consultas enviadas y el estado de cada una.
               </p>
             </div>
+
+            {/* Renderizado condicional si no hay consultas */}
             {consultas.length === 0 ? (
               <div className="p-12 text-center">
                 <div className="flex justify-center mb-4">
@@ -222,6 +251,7 @@ export default function PatientDashboard() {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {consultas.map((c) => {
+                  // Formateo de fecha para México
                   const fecha = c.created_at
                     ? new Date(c.created_at).toLocaleString('es-MX', {
                         dateStyle: 'medium',
@@ -229,20 +259,20 @@ export default function PatientDashboard() {
                       })
                     : '';
                   const atendida = c.status === 'atendida';
+                  
                   return (
                     <li
                       key={c.id}
                       className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-gray-50/80 transition-colors"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-gray-400 uppercase tracking-wide">
-                          {fecha}
-                        </p>
+                        <p className="text-xs text-gray-400 uppercase tracking-wide">{fecha}</p>
                         <p className="text-sm font-medium text-gray-800 mt-1 line-clamp-2">
-                          {c.motivo_consulta?.trim() ||
-                            'Consulta sin motivo indicado'}
+                          {c.motivo_consulta?.trim() || 'Consulta sin motivo indicado'}
                         </p>
                       </div>
+                      
+                      {/* Badge de estado de la consulta */}
                       <span
                         className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
                           atendida
@@ -250,11 +280,7 @@ export default function PatientDashboard() {
                             : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {atendida ? (
-                          <CheckCircle2 size={14} />
-                        ) : (
-                          <Clock size={14} />
-                        )}
+                        {atendida ? <CheckCircle2 size={14} /> : <Clock size={14} />}
                         {labelConsultaStatus(c.status)}
                       </span>
                     </li>
@@ -268,4 +294,3 @@ export default function PatientDashboard() {
     </div>
   );
 }
-
