@@ -3,10 +3,11 @@
 import { createClient } from '@/lib/client';
 import {
   Activity,
+  AlertCircle,
   CheckCircle2,
   ClipboardList,
   Clock,
-  FileDown, // Icono para el botón de descarga
+  FileDown, // Para el botón de PDF
   Loader2,
   LogOut,
   User
@@ -14,7 +15,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-// Tipado original
+// Tipado original preservado
 type ConsultaResumen = {
   id: string;
   created_at: string;
@@ -31,12 +32,12 @@ export default function PatientDashboard() {
   const supabase = createClient();
   const router = useRouter();
   
-  // Estados originales preservados
+  // Estados originales
   const [perfil, setPerfil] = useState<any>(null);
   const [consultas, setConsultas] = useState<ConsultaResumen[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Estado para manejar la carga individual de cada PDF
+  // Estado para el control de descarga del PDF
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   // URL de tu API Gateway de AWS Lambda
@@ -74,12 +75,11 @@ export default function PatientDashboard() {
   }, [supabase, router]);
 
   /**
-   * Manejador de descarga de PDF corregido para producción
+   * Función handleDownloadPDF: Alineada a Esquema_DB y corregida para Vercel
    */
   const handleDownloadPDF = async (consultaId: string) => {
     setDownloadingId(consultaId);
     try {
-      // Consulta real a Supabase uniendo antropometría y especialista
       const { data: cData, error } = await supabase
         .from('consultas')
         .select(`
@@ -92,7 +92,6 @@ export default function PatientDashboard() {
 
       if (error || !cData) throw new Error("Datos no encontrados");
 
-      // Casteo a any para que Vercel no falle con los arrays de las relaciones
       const rawData = cData as any;
       const antro = Array.isArray(rawData.consulta_antropometria) ? rawData.consulta_antropometria[0] : rawData.consulta_antropometria;
       const esp = Array.isArray(rawData.especialistas) ? rawData.especialistas[0] : rawData.especialistas;
@@ -126,7 +125,6 @@ export default function PatientDashboard() {
       downloadLink.href = linkSource;
       downloadLink.download = `Ficha_Nutricional_${consultaId}.pdf`;
       downloadLink.click();
-
     } catch (err) {
       console.error("Error PDF:", err);
       alert("Error al generar el PDF");
@@ -145,6 +143,7 @@ export default function PatientDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+      {/* Header Original */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -166,7 +165,7 @@ export default function PatientDashboard() {
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full gap-8 grid grid-cols-1 lg:grid-cols-3">
-        {/* Lado Izquierdo: Perfil */}
+        {/* Columna Perfil Original */}
         <section className="lg:col-span-1 space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 h-24"></div>
@@ -187,9 +186,18 @@ export default function PatientDashboard() {
               </div>
             </div>
           </div>
+
+          {/* Componente AlertCircle Original Restaurado */}
+          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex gap-3">
+            <AlertCircle className="text-amber-600 shrink-0" size={20} />
+            <div>
+              <p className="text-sm font-semibold text-amber-900">Aviso importante</p>
+              <p className="text-xs text-amber-700 mt-0.5">Recuerda asistir puntualmente a tus citas para un mejor seguimiento.</p>
+            </div>
+          </div>
         </section>
 
-        {/* Lado Derecho: Actividad Reciente */}
+        {/* Columna Actividad Reciente - Bloque solicitado */}
         <section className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="p-6 border-b">
@@ -232,8 +240,8 @@ export default function PatientDashboard() {
                           {c.motivo_consulta?.trim() || 'Consulta sin motivo indicado'}
                         </p>
                       </div>
-                      
-                      {/* Contenedor de Status y Botón */}
+
+                      {/* Contenedor de Status y Botón de PDF */}
                       <div className="flex items-center gap-3">
                         <span
                           className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
@@ -244,7 +252,7 @@ export default function PatientDashboard() {
                           {labelConsultaStatus(c.status)}
                         </span>
 
-                        {/* Botón de PDF: Solo visible si está atendida */}
+                        {/* Botón de PDF integrado */}
                         {atendida && (
                           <button
                             onClick={() => handleDownloadPDF(c.id)}
