@@ -1,20 +1,19 @@
-'use client';
+'use client'; // Indica que este componente se ejecuta en el cliente (navegador)
 
-import { createClient } from '@/lib/client';
+import { createClient } from '@/lib/client'; // Importación del cliente de Supabase
 import {
   Activity,
   AlertCircle,
   CheckCircle2,
   ClipboardList,
   Clock,
-  FileDown, // Agregado para el botón
-  Loader2,
   LogOut,
   User
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+} from 'lucide-react'; // Iconos de la librería Lucide para la interfaz
+import { useRouter } from 'next/navigation'; // Hook para redireccionamiento de rutas
+import { useEffect, useState } from 'react'; // Hooks de React para ciclo de vida y estado
 
+// Definición de la estructura de datos para una consulta resumida
 type ConsultaResumen = {
   id: string;
   created_at: string;
@@ -22,29 +21,43 @@ type ConsultaResumen = {
   status: string;
 };
 
+/**
+ * Función auxiliar para transformar el estatus técnico 
+ * en un texto amigable para el usuario.
+ */
 function labelConsultaStatus(status: string) {
   if (status === 'atendida') return 'Atendida';
   return 'Pendiente de atención';
 }
 
 export default function PatientDashboard() {
+  // Inicialización de hooks
   const supabase = createClient();
   const router = useRouter();
-  const [perfil, setPerfil] = useState<any>(null);
-  const [consultas, setConsultas] = useState<ConsultaResumen[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  const AWS_LAMBDA_URL = 'https://5n9fv3460m.execute-api.us-east-2.amazonaws.com/default/generador-pdf-nutritech';
+  // Estados del componente
+  const [perfil, setPerfil] = useState<any>(null); // Datos del perfil del usuario
+  const [consultas, setConsultas] = useState<ConsultaResumen[]>([]); // Lista de consultas
+  const [loading, setLoading] = useState(true); // Estado de carga inicial
 
   useEffect(() => {
+    /**
+     * Función asíncrona para obtener los datos necesarios de Supabase
+     */
     const fetchUserData = async () => {
       try {
+        // 1. Obtener el usuario autenticado
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        if (!user) return;
+        
+        // Si no hay sesión, redirigir al login
+        if (!user) {
+          router.push('/login');
+          return;
+        };
 
+        // 2. Obtener datos detallados del perfil (CURP, Nombre, etc.)
         const { data: profileData } = await supabase
           .from('perfiles')
           .select('*')
@@ -53,90 +66,45 @@ export default function PatientDashboard() {
 
         setPerfil(profileData);
 
-        const { data: consultasData } = await supabase
+        // 3. Obtener el historial de consultas filtrado por el ID del paciente
+        const { data: consultasData, error: consultasError } = await supabase
           .from('consultas')
           .select('id, created_at, motivo_consulta, status')
           .eq('paciente_id', user.id)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false }); // Ordenar por fecha (más reciente primero)
 
+        if (consultasError) throw consultasError;
         setConsultas(consultasData || []);
+
       } catch (error) {
-        console.error('Error:', error);
+        console.error('Error al cargar datos del dashboard:', error);
       } finally {
-        setLoading(false);
+        setLoading(false); // Finalizar estado de carga sin importar el resultado
       }
     };
 
     fetchUserData();
   }, [supabase, router]);
 
-  const handleDownloadPDF = async (consultaId: string) => {
-    setDownloadingId(consultaId);
-    try {
-      const { data: cData, error } = await supabase
-        .from('consultas')
-        .select(`
-          id, motivo_consulta, diagnostico, plan_sugerido, created_at,
-          consulta_antropometria (peso, estatura, imc),
-          especialistas (perfiles (nombre_completo, telefono))
-        `)
-        .eq('id', consultaId)
-        .single();
-
-      if (error || !cData) throw new Error("Error");
-
-      const rawData = cData as any;
-      const antro = Array.isArray(rawData.consulta_antropometria) ? rawData.consulta_antropometria[0] : rawData.consulta_antropometria;
-      const esp = Array.isArray(rawData.especialistas) ? rawData.especialistas[0] : rawData.especialistas;
-
-      const payload = {
-        consulta_id: rawData.id,
-        nombre_completo: perfil?.nombre_completo,
-        curp: perfil?.curp,
-        email: perfil?.email,
-        sexo: perfil?.sexo,
-        fecha_emision: new Date(rawData.created_at).toLocaleDateString('es-MX'),
-        peso: antro?.peso || "N/A",
-        estatura: antro?.estatura || "N/A",
-        imc: antro?.imc || "N/A",
-        especialista_nombre: esp?.perfiles?.nombre_completo || "Especialista",
-        especialista_tel: esp?.perfiles?.telefono || "S/N",
-        motivo_consulta: rawData.motivo_consulta,
-        diagnostico: rawData.diagnostico,
-        plan_sugerido: rawData.plan_sugerido
-      };
-
-      const response = await fetch(AWS_LAMBDA_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json();
-      const linkSource = `data:application/pdf;base64,${result.body}`;
-      const downloadLink = document.createElement("a");
-      downloadLink.href = linkSource;
-      downloadLink.download = `Ficha_${consultaId}.pdf`;
-      downloadLink.click();
-    } catch (err) {
-      alert("Error al generar PDF");
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
+  // Pantalla de carga (Splash Screen) mientras se obtienen los datos
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="animate-spin text-blue-600" size={40} />
+        <div className="flex flex-col items-center gap-4">
+          <Activity className="animate-spin text-blue-600" size={40} />
+          <p className="text-gray-500 font-medium">Cargando tu panel...</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+      
+      {/* BARRA DE NAVEGACIÓN (HEADER) */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          {/* Logo y Nombre del Sistema */}
           <div className="flex items-center gap-2">
             <div className="bg-blue-600 p-2 rounded-lg">
               <Activity className="text-white" size={20} />
@@ -145,6 +113,7 @@ export default function PatientDashboard() {
               Nutri-Tech
             </h1>
           </div>
+          {/* Botón de Cerrar Sesión */}
           <button
             onClick={() =>
               supabase.auth.signOut().then(() => router.push('/login'))
@@ -157,8 +126,12 @@ export default function PatientDashboard() {
         </div>
       </header>
 
+      {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full gap-8 grid grid-cols-1 lg:grid-cols-3">
+        
+        {/* SECCIÓN IZQUIERDA: Perfil y Avisos */}
         <section className="lg:col-span-1 space-y-6">
+          {/* Tarjeta de Usuario */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 h-24"></div>
             <div className="px-6 pb-6">
@@ -181,6 +154,7 @@ export default function PatientDashboard() {
             </div>
           </div>
 
+          {/* Banner de Aviso Legal/Informativo */}
           <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex gap-3">
             <AlertCircle className="text-amber-600 shrink-0" size={20} />
             <div>
@@ -195,8 +169,10 @@ export default function PatientDashboard() {
           </div>
         </section>
 
+        {/* SECCIÓN DERECHA: Historial de Actividad */}
         <section className="lg:col-span-2 space-y-6">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Encabezado de la lista */}
             <div className="p-6 border-b">
               <h3 className="font-bold text-gray-800 flex items-center gap-2">
                 <Clock className="text-gray-400" size={20} /> Actividad Reciente
@@ -205,7 +181,10 @@ export default function PatientDashboard() {
                 Tus consultas enviadas y el estado de cada una.
               </p>
             </div>
+
+            {/* Lista de Consultas */}
             {consultas.length === 0 ? (
+              // Estado vacío (Empty State)
               <div className="p-12 text-center">
                 <div className="flex justify-center mb-4">
                   <ClipboardList size={48} className="text-gray-200" />
@@ -215,6 +194,7 @@ export default function PatientDashboard() {
                 </p>
               </div>
             ) : (
+              // Mapeo del historial
               <ul className="divide-y divide-gray-100">
                 {consultas.map((c) => {
                   const fecha = c.created_at
@@ -224,11 +204,13 @@ export default function PatientDashboard() {
                       })
                     : '';
                   const atendida = c.status === 'atendida';
+
                   return (
                     <li
                       key={c.id}
                       className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-gray-50/80 transition-colors"
                     >
+                      {/* Información de la consulta */}
                       <div className="min-w-0 flex-1">
                         <p className="text-xs text-gray-400 uppercase tracking-wide">
                           {fecha}
@@ -238,38 +220,22 @@ export default function PatientDashboard() {
                             'Consulta sin motivo indicado'}
                         </p>
                       </div>
-                      
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                            atendida
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {atendida ? (
-                            <CheckCircle2 size={14} />
-                          ) : (
-                            <Clock size={14} />
-                          )}
-                          {labelConsultaStatus(c.status)}
-                        </span>
 
-                        {atendida && (
-                          <button
-                            onClick={() => handleDownloadPDF(c.id)}
-                            disabled={downloadingId === c.id}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
-                          >
-                            {downloadingId === c.id ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <FileDown size={14} />
-                            )}
-                            {downloadingId === c.id ? 'Cargando...' : 'PDF'}
-                          </button>
+                      {/* Etiqueta de Estatus */}
+                      <span
+                        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                          atendida
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {atendida ? (
+                          <CheckCircle2 size={14} />
+                        ) : (
+                          <Clock size={14} />
                         )}
-                      </div>
+                        {labelConsultaStatus(c.status)}
+                      </span>
                     </li>
                   );
                 })}
