@@ -1,19 +1,19 @@
-'use client'; // Indica que este componente se ejecuta en el cliente (navegador)
+'use client';
 
-import { createClient } from '@/lib/client'; // Importación del cliente de Supabase
+import { createClient } from '@/lib/client';
 import {
   Activity,
   AlertCircle,
+  Calendar,
   CheckCircle2,
   ClipboardList,
   Clock,
   LogOut,
-  User
-} from 'lucide-react'; // Iconos de la librería Lucide para la interfaz
-import { useRouter } from 'next/navigation'; // Hook para redireccionamiento de rutas
-import { useEffect, useState } from 'react'; // Hooks de React para ciclo de vida y estado
+  User,
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
-// Definición de la estructura de datos para una consulta resumida
 type ConsultaResumen = {
   id: string;
   created_at: string;
@@ -21,43 +21,26 @@ type ConsultaResumen = {
   status: string;
 };
 
-/**
- * Función auxiliar para transformar el estatus técnico 
- * en un texto amigable para el usuario.
- */
 function labelConsultaStatus(status: string) {
   if (status === 'atendida') return 'Atendida';
   return 'Pendiente de atención';
 }
 
 export default function PatientDashboard() {
-  // Inicialización de hooks
   const supabase = createClient();
   const router = useRouter();
-
-  // Estados del componente
-  const [perfil, setPerfil] = useState<any>(null); // Datos del perfil del usuario
-  const [consultas, setConsultas] = useState<ConsultaResumen[]>([]); // Lista de consultas
-  const [loading, setLoading] = useState(true); // Estado de carga inicial
+  const [perfil, setPerfil] = useState<any>(null);
+  const [consultas, setConsultas] = useState<ConsultaResumen[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    /**
-     * Función asíncrona para obtener los datos necesarios de Supabase
-     */
     const fetchUserData = async () => {
       try {
-        // 1. Obtener el usuario autenticado
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        
-        // Si no hay sesión, redirigir al login
-        if (!user) {
-          router.push('/login');
-          return;
-        };
+        if (!user) return;
 
-        // 2. Obtener datos detallados del perfil (CURP, Nombre, etc.)
         const { data: profileData } = await supabase
           .from('perfiles')
           .select('*')
@@ -66,113 +49,159 @@ export default function PatientDashboard() {
 
         setPerfil(profileData);
 
-        // 3. Obtener el historial de consultas filtrado por el ID del paciente
         const { data: consultasData, error: consultasError } = await supabase
           .from('consultas')
           .select('id, created_at, motivo_consulta, status')
           .eq('paciente_id', user.id)
-          .order('created_at', { ascending: false }); // Ordenar por fecha (más reciente primero)
+          .order('created_at', { ascending: false });
 
-        if (consultasError) throw consultasError;
-        setConsultas(consultasData || []);
-
+        if (consultasError) {
+          console.error('Error cargando consultas:', consultasError);
+          setConsultas([]);
+        } else {
+          setConsultas((consultasData as ConsultaResumen[]) ?? []);
+        }
       } catch (error) {
-        console.error('Error al cargar datos del dashboard:', error);
+        console.error('Error cargando dashboard:', error);
       } finally {
-        setLoading(false); // Finalizar estado de carga sin importar el resultado
+        setLoading(false);
       }
     };
 
     fetchUserData();
-  }, [supabase, router]);
+  }, [supabase]);
 
-  // Pantalla de carga (Splash Screen) mientras se obtienen los datos
-  if (loading) {
+  if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-4">
-          <Activity className="animate-spin text-blue-600" size={40} />
-          <p className="text-gray-500 font-medium">Cargando tu panel...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
-      
-      {/* BARRA DE NAVEGACIÓN (HEADER) */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Logo y Nombre del Sistema */}
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <Activity className="text-white" size={20} />
-            </div>
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-800">
-              Nutri-Tech
+    <div className="min-h-screen bg-gray-50 pb-12">
+      <header className="bg-white border-b shadow-sm p-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              Bienvenido, {perfil?.nombre_completo?.split(' ')[0] || 'Paciente'}
             </h1>
+            <p className="text-gray-500 text-sm">
+              Panel de control de salud nutricional
+            </p>
           </div>
-          {/* Botón de Cerrar Sesión */}
+
+          <div
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
+              perfil?.estado_aprobacion === 'aprobado'
+                ? 'bg-green-100 text-green-700'
+                : 'bg-yellow-100 text-yellow-700'
+            }`}
+          >
+            {perfil?.estado_aprobacion === 'aprobado' ? (
+              <CheckCircle2 size={18} />
+            ) : (
+              <Clock size={18} />
+            )}
+            {perfil?.estado_aprobacion === 'aprobado'
+              ? 'Perfil Verificado'
+              : 'Aprobación Pendiente'}
+          </div>
+
           <button
-            onClick={() =>
-              supabase.auth.signOut().then(() => router.push('/login'))
-            }
-            className="flex items-center gap-2 text-gray-500 hover:text-red-600 transition-colors text-sm font-medium"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              router.push('/login');
+            }}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
             <LogOut size={18} />
-            <span className="hidden sm:inline">Cerrar Sesión</span>
+            Cerrar sesión
           </button>
         </div>
       </header>
 
-      {/* CONTENIDO PRINCIPAL */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full gap-8 grid grid-cols-1 lg:grid-cols-3">
-        
-        {/* SECCIÓN IZQUIERDA: Perfil y Avisos */}
+      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <section className="lg:col-span-1 space-y-6">
-          {/* Tarjeta de Usuario */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 h-24"></div>
-            <div className="px-6 pb-6">
-              <div className="relative -mt-12 mb-4">
-                <div className="h-24 w-24 rounded-2xl bg-white p-1 shadow-md mx-auto">
-                  <div className="h-full w-full rounded-xl bg-gray-100 flex items-center justify-center text-blue-600">
-                    <User size={40} />
-                  </div>
-                </div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <User className="text-blue-600" size={20} /> Datos Personales
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-500 text-sm">CURP</span>
+                <span className="font-medium text-sm">{perfil?.curp}</span>
               </div>
-              <div className="text-center">
-                <h2 className="text-xl font-bold text-gray-900">
-                  {perfil?.nombre_completo}
-                </h2>
-                <p className="text-sm text-gray-500 mb-4">{perfil?.email}</p>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
-                  CURP: {perfil?.curp}
-                </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-500 text-sm">Sexo</span>
+                <span className="font-medium text-sm">{perfil?.sexo}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span className="text-gray-500 text-sm">Teléfono</span>
+                <span className="font-medium text-sm">{perfil?.telefono}</span>
               </div>
             </div>
           </div>
 
-          {/* Banner de Aviso Legal/Informativo */}
-          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex gap-3">
-            <AlertCircle className="text-amber-600 shrink-0" size={20} />
-            <div>
-              <p className="text-sm font-semibold text-amber-900">
-                Aviso importante
-              </p>
-              <p className="text-xs text-amber-700 mt-0.5">
-                Recuerda asistir puntualmente a tus citas para un mejor
-                seguimiento.
-              </p>
-            </div>
+          <div className="bg-blue-600 text-white p-6 rounded-2xl shadow-md">
+            <h3 className="font-bold flex items-center gap-2">
+              <Activity size={20} /> Resumen de Salud
+            </h3>
+            <p className="text-blue-100 text-sm mt-2">
+              Próximamente verás aquí tus gráficas de IMC y peso.
+            </p>
+            <button className="mt-4 w-full bg-white text-blue-600 py-2 rounded-xl text-sm font-bold hover:bg-blue-50 transition-colors">
+              Ver Historial Completo
+            </button>
           </div>
         </section>
 
-        {/* SECCIÓN DERECHA: Historial de Actividad */}
         <section className="lg:col-span-2 space-y-6">
+          {perfil?.estado_aprobacion === 'pendiente' && (
+            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 items-start">
+              <AlertCircle
+                className="text-amber-600 shrink-0"
+                size={20}
+              />
+              <div>
+                <h4 className="font-bold text-amber-800 text-sm">
+                  Cuenta en revisión
+                </h4>
+                <p className="text-amber-700 text-xs mt-1">
+                  Tu expediente está siendo revisado por un especialista. Podrás
+                  agendar citas una vez que seas aprobado.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => router.push('/nueva-consulta')}
+              className="text-left bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-blue-200 transition-all cursor-pointer group"
+            >
+              <div className="bg-blue-50 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                <Calendar size={24} />
+              </div>
+              <h4 className="font-bold text-gray-800">Nueva consulta</h4>
+              <p className="text-gray-500 text-xs mt-1">
+                Responde al formulario de consulta
+              </p>
+            </button>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:border-green-200 transition-all cursor-pointer group">
+              <div className="bg-green-50 w-12 h-12 rounded-xl flex items-center justify-center text-green-600 mb-4 group-hover:bg-green-600 group-hover:text-white transition-colors">
+                <ClipboardList size={24} />
+              </div>
+              <h4 className="font-bold text-gray-800">Mi Plan</h4>
+              <p className="text-gray-500 text-xs mt-1">
+                Revisa tu dieta personalizada y recomendaciones.
+              </p>
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {/* Encabezado de la lista */}
             <div className="p-6 border-b">
               <h3 className="font-bold text-gray-800 flex items-center gap-2">
                 <Clock className="text-gray-400" size={20} /> Actividad Reciente
@@ -181,10 +210,7 @@ export default function PatientDashboard() {
                 Tus consultas enviadas y el estado de cada una.
               </p>
             </div>
-
-            {/* Lista de Consultas */}
             {consultas.length === 0 ? (
-              // Estado vacío (Empty State)
               <div className="p-12 text-center">
                 <div className="flex justify-center mb-4">
                   <ClipboardList size={48} className="text-gray-200" />
@@ -194,7 +220,6 @@ export default function PatientDashboard() {
                 </p>
               </div>
             ) : (
-              // Mapeo del historial
               <ul className="divide-y divide-gray-100">
                 {consultas.map((c) => {
                   const fecha = c.created_at
@@ -204,13 +229,11 @@ export default function PatientDashboard() {
                       })
                     : '';
                   const atendida = c.status === 'atendida';
-
                   return (
                     <li
                       key={c.id}
                       className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-gray-50/80 transition-colors"
                     >
-                      {/* Información de la consulta */}
                       <div className="min-w-0 flex-1">
                         <p className="text-xs text-gray-400 uppercase tracking-wide">
                           {fecha}
@@ -220,8 +243,6 @@ export default function PatientDashboard() {
                             'Consulta sin motivo indicado'}
                         </p>
                       </div>
-
-                      {/* Etiqueta de Estatus */}
                       <span
                         className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
                           atendida
@@ -247,3 +268,4 @@ export default function PatientDashboard() {
     </div>
   );
 }
+
