@@ -112,9 +112,9 @@ export default function PatientDashboard() {
           diagnostico,
           plan_alimenticio,
           created_at,
-          antropometria:antropometria_id (peso, estatura, imc),
-          especialista:especialista_id (
-            perfil:perfil_id (nombre_completo, telefono)
+          consulta_antropometria (peso, estatura, imc),
+          especialistas (
+            perfiles (nombre_completo, telefono)
           )
         `)
         .eq('id', consultaId)
