@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  FileDown,
+  Loader2,
   LogOut,
   User,
 } from 'lucide-react';
@@ -46,6 +48,8 @@ export default function PatientDashboard() {
   const [perfil, setPerfil] = useState<any>(null); // Datos del perfil del usuario
   const [consultas, setConsultas] = useState<ConsultaResumen[]>([]); // Lista de consultas del paciente
   const [loading, setLoading] = useState(true); // Estado de carga inicial
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const AWS_LAMBDA_URL = 'https://5n9fv3460m.execute-api.us-east-2.amazonaws.com/default/generador-pdf-nutritech';
 
   /**
    * Efecto para cargar los datos iniciales del usuario y sus consultas
@@ -95,6 +99,62 @@ export default function PatientDashboard() {
     fetchUserData();
   }, [supabase]);
 
+  // FUNCIÓN PARA DESCARGAR PDF DE CONSULTA
+  const handleDownloadPDF = async (consultaId: string) => {
+    setDownloadingId(consultaId);
+    try {
+      const { data: cData, error } = await supabase
+        .from('consultas')
+        .select(`
+          id, motivo_consulta, diagnostico, plan_sugerido, created_at,
+          consulta_antropometria (peso, estatura, imc),
+          especialistas (perfiles (nombre_completo, telefono))
+        `)
+        .eq('id', consultaId)
+        .single();
+
+      if (error || !cData) throw new Error("Datos no encontrados");
+
+      const rawData = cData as any;
+      const antro = Array.isArray(rawData.consulta_antropometria) ? rawData.consulta_antropometria[0] : rawData.consulta_antropometria;
+      const esp = Array.isArray(rawData.especialistas) ? rawData.especialistas[0] : rawData.especialistas;
+
+      const payload = {
+        consulta_id: rawData.id,
+        nombre_completo: perfil?.nombre_completo,
+        curp: perfil?.curp,
+        email: perfil?.email,
+        sexo: perfil?.sexo,
+        fecha_emision: new Date(rawData.created_at).toLocaleDateString('es-MX'),
+        peso: antro?.peso || "N/A",
+        estatura: antro?.estatura || "N/A",
+        imc: antro?.imc || "N/A",
+        especialista_nombre: esp?.perfiles?.nombre_completo || "Especialista Nutri-Tech",
+        especialista_tel: esp?.perfiles?.telefono || "S/N",
+        motivo_consulta: rawData.motivo_consulta,
+        diagnostico: rawData.diagnostico,
+        plan_sugerido: rawData.plan_sugerido
+      };
+
+      const response = await fetch(AWS_LAMBDA_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      const linkSource = `data:application/pdf;base64,${result.body}`;
+      const downloadLink = document.createElement("a");
+      downloadLink.href = linkSource;
+      downloadLink.download = `Ficha_Nutricional_${consultaId}.pdf`;
+      downloadLink.click();
+    } catch (err) {
+      console.error(err);
+      alert("Error al generar el PDF");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
   // Pantalla de carga (Skeleton o Spinner)
   if (loading)
     return (
@@ -229,6 +289,7 @@ export default function PatientDashboard() {
 
           {/* --- Lista de Actividad Reciente (Consultas) --- */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* ENCABEZADO DEL BLOQUE: Título e ícono de reloj */}
             <div className="p-6 border-b">
               <h3 className="font-bold text-gray-800 flex items-center gap-2">
                 <Clock className="text-gray-400" size={20} /> Actividad Reciente
@@ -238,7 +299,7 @@ export default function PatientDashboard() {
               </p>
             </div>
 
-            {/* Renderizado condicional si no hay consultas */}
+            {/* RENDERIZADO CONDICIONAL: Si el arreglo de consultas está vacío, muestra el estado "Sin datos" */}
             {consultas.length === 0 ? (
               <div className="p-12 text-center">
                 <div className="flex justify-center mb-4">
@@ -249,40 +310,68 @@ export default function PatientDashboard() {
                 </p>
               </div>
             ) : (
+              /* LISTA DE CONSULTAS: Si hay datos, mapeamos el arreglo para crear cada renglón */
               <ul className="divide-y divide-gray-100">
                 {consultas.map((c) => {
-                  // Formateo de fecha para México
+                  // Formateamos la fecha a un estilo legible para México (ej. 14 may 2026, 08:30)
                   const fecha = c.created_at
                     ? new Date(c.created_at).toLocaleString('es-MX', {
                         dateStyle: 'medium',
                         timeStyle: 'short',
                       })
                     : '';
+                    
+                  // Variable booleana para saber si la consulta ya fue finalizada/atendida
                   const atendida = c.status === 'atendida';
-                  
+
                   return (
                     <li
                       key={c.id}
                       className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-gray-50/80 transition-colors"
                     >
+                      {/* LADO IZQUIERDO: Información del motivo y fecha */}
                       <div className="min-w-0 flex-1">
                         <p className="text-xs text-gray-400 uppercase tracking-wide">{fecha}</p>
                         <p className="text-sm font-medium text-gray-800 mt-1 line-clamp-2">
                           {c.motivo_consulta?.trim() || 'Consulta sin motivo indicado'}
                         </p>
                       </div>
-                      
-                      {/* Badge de estado de la consulta */}
-                      <span
-                        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                          atendida
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {atendida ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-                        {labelConsultaStatus(c.status)}
-                      </span>
+
+                      {/* LADO DERECHO (CONTENEDOR FLEX): Agrupa el Badge de estado y el Botón de PDF */}
+                      <div className="flex items-center gap-3">
+                        
+                        {/* BADGE DE ESTADO: Cambia de color verde si está atendida o ámbar si está pendiente */}
+                        <span
+                          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                            atendida
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {/* Ícono dinámico según el estado */}
+                          {atendida ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                          {labelConsultaStatus(c.status)}
+                        </span>
+
+                        {/* BOTÓN DE DESCARGA PDF: Solo se renderiza si el estado es 'atendida' */}
+                        {atendida && (
+                          <button
+                            onClick={() => handleDownloadPDF(c.id)} // Llama a la función de AWS Lambda pasándole el ID
+                            disabled={downloadingId === c.id}       // Se deshabilita mientras se genera el archivo
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                            title="Descargar Diagnóstico PDF"
+                          >
+                            {/* Si el ID de esta consulta coincide con el que se está descargando, muestra un spinner */}
+                            {downloadingId === c.id ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <FileDown size={14} /> // Si no, muestra el ícono de descarga normal
+                            )}
+                            {/* Texto dinámico según el estado de la descarga */}
+                            {downloadingId === c.id ? 'Generando...' : 'PDF'}
+                          </button>
+                        )}
+                      </div>
                     </li>
                   );
                 })}
