@@ -127,15 +127,24 @@ export default function PatientDashboard() {
 
       // 2. MAPEO SEGURO: Evitamos que TypeScript truene en Vercel
       const rawData = cData as any;
-      
-      // Supabase a veces devuelve arrays en las relaciones, validamos:
-      const antro = Array.isArray(rawData.antropometria) ? rawData.antropometria[0] : rawData.antropometria;
-      const esp = Array.isArray(rawData.especialista) ? rawData.especialista[0] : rawData.especialista;
-      const perfilEsp = esp?.perfil;
+
+      // Extraemos los datos considerando que Supabase devuelve objetos o arreglos
+      const antro = Array.isArray(rawData.consulta_antropometria) 
+        ? rawData.consulta_antropometria[0] 
+        : rawData.consulta_antropometria;
+
+      const esp = Array.isArray(rawData.especialistas) 
+        ? rawData.especialistas[0] 
+        : rawData.especialistas;
+
+      // IMPORTANTE: En tu esquema, especialistas se une a perfiles por perfil_id
+      const perfilEsp = Array.isArray(esp?.perfiles) 
+        ? esp?.perfiles[0] 
+        : esp?.perfiles;
 
       const payload = {
         consulta_id: rawData.id,
-        nombre_completo: perfil?.nombre_completo, // Datos del paciente (ya en el estado)
+        nombre_completo: perfil?.nombre_completo,
         curp: perfil?.curp,
         email: perfil?.email,
         sexo: perfil?.sexo,
@@ -145,9 +154,9 @@ export default function PatientDashboard() {
         imc: antro?.imc || "N/A",
         especialista_nombre: perfilEsp?.nombre_completo || "Especialista Nutri-Tech",
         especialista_tel: perfilEsp?.telefono || "S/N",
-        motivo_consulta: rawData.motivo_consulta || "Consulta general",
-        diagnostico: rawData.diagnostico || "Pendiente",
-        plan_alimenticio: rawData.plan_alimenticio || "Seguir indicaciones" // Nombre corregido
+        motivo: rawData.motivo_consulta,
+        diagnostico: rawData.diagnostico,
+        plan_alimenticio: rawData.plan_alimenticio
       };
 
       // 3. ENVÍO A LAMBDA
