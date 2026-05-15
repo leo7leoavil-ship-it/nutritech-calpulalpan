@@ -104,8 +104,8 @@ export default function PatientDashboard() {
     setDownloadingId(consultaId);
     
     try {
-      // CONSULTA CORREGIDA: 
-      // Sintaxis: "nombre_deseado : nombre_columna_FK ( campos_tabla_relacionada )"
+      // CONSULTA CORREGIDA: Usamos el nombre de la columna FK (especialista_id)
+      // para que Supabase encuentre el camino hacia la tabla especialistas.
       const { data: cData, error } = await supabase
         .from('consultas')
         .select(`
@@ -114,9 +114,9 @@ export default function PatientDashboard() {
           diagnostico,
           plan_alimenticio,
           created_at,
-          consulta_antropometria (peso, estatura, imc),
-          especialistas (
-            perfiles (nombre_completo, telefono)
+          antropometria:antropometria_id ( peso, estatura, imc ),
+          especialista:especialista_id (
+            perfil:perfil_id ( nombre_completo, telefono )
           )
         `)
         .eq('id', consultaId)
@@ -129,14 +129,9 @@ export default function PatientDashboard() {
 
       const rawData = cData as any;
 
-      // Supabase devuelve objetos cuando la relación es 1:1, 
-      // pero a veces devuelve un array de un solo elemento si la FK no es UNIQUE.
-      // Usamos este helper para asegurar que obtenemos el objeto:
-      const getFirst = (val: any) => Array.isArray(val) ? val[0] : val;
-
-      const antro = getFirst(rawData.consulta_antropometria);
-      const especialistaObj = getFirst(rawData.especialistas);
-      const perfilEsp = getFirst(especialistaObj?.perfiles);
+      // Al usar alias (nombre:columna), los datos vienen simplificados como objetos
+      const antro = rawData.antropometria;
+      const perfilEsp = rawData.especialista?.perfil;
 
       const payload = {
         consulta_id: rawData.id,
@@ -145,16 +140,23 @@ export default function PatientDashboard() {
         email: perfil?.email,
         sexo: perfil?.sexo,
         fecha_emision: new Date(rawData.created_at).toLocaleDateString('es-MX'),
+        
+        // Datos Antropométricos
         peso: antro?.peso || "N/A",
         estatura: antro?.estatura || "N/A",
         imc: antro?.imc || "N/A",
+
+        // Datos Especialista
         especialista_nombre: perfilEsp?.nombre_completo || "Especialista Nutri-Tech",
         especialista_tel: perfilEsp?.telefono || "S/N",
+
+        // Datos Consulta (Alineado a Lambda y DB)
         motivo_consulta: rawData.motivo_consulta || "Consulta general",
-        diagnostico: rawData.diagnostico || "Pendiente",
+        diagnostico: rawData.diagnostico || "Sin diagnóstico",
         plan_alimenticio: rawData.plan_alimenticio || "Seguir indicaciones"
       };
 
+      // Petición a la Lambda de AWS
       const response = await fetch(AWS_LAMBDA_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -163,16 +165,16 @@ export default function PatientDashboard() {
 
       const result = await response.json();
       
-      // Descarga automática del PDF devuelto por Lambda
+      // Descarga el PDF que devuelve la Lambda en Base64
       const linkSource = `data:application/pdf;base64,${result.body}`;
       const downloadLink = document.createElement("a");
       downloadLink.href = linkSource;
-      downloadLink.download = `Diagnostico_${perfil?.nombre_completo}_${consultaId}.pdf`;
+      downloadLink.download = `Ficha_Nutricional_${perfil?.nombre_completo}_${consultaId}.pdf`;
       downloadLink.click();
 
     } catch (err) {
       console.error("Error detallado:", err);
-      alert("Error al generar el PDF. Revisa la consola para más detalles.");
+      alert("Error al generar el PDF. Revisa la consola.");
     } finally {
       setDownloadingId(null);
     }
