@@ -102,8 +102,10 @@ export default function PatientDashboard() {
   // FUNCIÓN PARA DESCARGAR PDF DE CONSULTA
   const handleDownloadPDF = async (consultaId: string) => {
     setDownloadingId(consultaId);
+    
     try {
-      // 1. CONSULTA CORREGIDA: Usamos los nombres exactos de las FK del esquema
+      // NOTA TÉCNICA: Usamos el nombre de la COLUMNA que tiene la FK 
+      // y le ponemos un alias para que sea fácil de leer.
       const { data: cData, error } = await supabase
         .from('consultas')
         .select(`
@@ -112,9 +114,9 @@ export default function PatientDashboard() {
           diagnostico,
           plan_alimenticio,
           created_at,
-          consulta_antropometria (peso, estatura, imc),
-          especialistas (
-            perfiles (nombre_completo, telefono)
+          antropometria:antropometria_id (peso, estatura, imc),
+          especialista:especialista_id (
+            perfiles:perfil_id (nombre_completo, telefono)
           )
         `)
         .eq('id', consultaId)
@@ -125,22 +127,12 @@ export default function PatientDashboard() {
         throw new Error("No se pudieron obtener los datos de la base de datos");
       }
 
-      // 2. MAPEO SEGURO: Evitamos que TypeScript truene en Vercel
+      // Casteo a any para procesar los datos anidados
       const rawData = cData as any;
 
-      // Extraemos los datos considerando que Supabase devuelve objetos o arreglos
-      const antro = Array.isArray(rawData.consulta_antropometria) 
-        ? rawData.consulta_antropometria[0] 
-        : rawData.consulta_antropometria;
-
-      const esp = Array.isArray(rawData.especialistas) 
-        ? rawData.especialistas[0] 
-        : rawData.especialistas;
-
-      // IMPORTANTE: En tu esquema, especialistas se une a perfiles por perfil_id
-      const perfilEsp = Array.isArray(esp?.perfiles) 
-        ? esp?.perfiles[0] 
-        : esp?.perfiles;
+      // Supabase devuelve las relaciones 1:1 como objetos directos con esta sintaxis
+      const antro = rawData.antropometria;
+      const perfilEsp = rawData.especialista?.perfiles;
 
       const payload = {
         consulta_id: rawData.id,
@@ -149,17 +141,22 @@ export default function PatientDashboard() {
         email: perfil?.email,
         sexo: perfil?.sexo,
         fecha_emision: new Date(rawData.created_at).toLocaleDateString('es-MX'),
+        
+        // Datos de antropometría
         peso: antro?.peso || "N/A",
         estatura: antro?.estatura || "N/A",
         imc: antro?.imc || "N/A",
+
+        // Datos del especialista
         especialista_nombre: perfilEsp?.nombre_completo || "Especialista Nutri-Tech",
         especialista_tel: perfilEsp?.telefono || "S/N",
-        motivo: rawData.motivo_consulta,
-        diagnostico: rawData.diagnostico,
-        plan_alimenticio: rawData.plan_alimenticio
+
+        motivo_consulta: rawData.motivo_consulta || "Consulta general",
+        diagnostico: rawData.diagnostico || "Pendiente",
+        plan_alimenticio: rawData.plan_alimenticio || "Seguir indicaciones"
       };
 
-      // 3. ENVÍO A LAMBDA
+      // Envío a AWS Lambda
       const response = await fetch(AWS_LAMBDA_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,9 +165,7 @@ export default function PatientDashboard() {
 
       const result = await response.json();
       
-      if (!result.body) throw new Error("La Lambda no respondió con un archivo");
-
-      // 4. DESCARGA
+      // Descarga del PDF
       const linkSource = `data:application/pdf;base64,${result.body}`;
       const downloadLink = document.createElement("a");
       downloadLink.href = linkSource;
@@ -179,7 +174,7 @@ export default function PatientDashboard() {
 
     } catch (err) {
       console.error("Error detallado:", err);
-      alert("Error al generar el PDF. Revisa la consola para más detalles.");
+      alert("Error al generar el PDF. Verifica la consola.");
     } finally {
       setDownloadingId(null);
     }
