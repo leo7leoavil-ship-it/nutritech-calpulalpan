@@ -114,9 +114,9 @@ export default function PatientDashboard() {
           diagnostico,
           plan_alimenticio,
           created_at,
-          antropometria:antropometria_id ( peso, estatura, imc ),
-          especialista:especialista_id (
-            perfil:perfil_id ( nombre_completo, telefono )
+          consulta_antropometria (peso, estatura, imc),
+          especialistas (
+            perfiles (nombre_completo, telefono)
           )
         `)
         .eq('id', consultaId)
@@ -129,9 +129,14 @@ export default function PatientDashboard() {
 
       const rawData = cData as any;
 
-      // Con el alias, accedemos directamente al objeto
-      const antro = rawData.antropometria;
-      const perfilEsp = rawData.especialista?.perfil;
+      // Supabase devuelve objetos cuando la relación es 1:1, 
+      // pero a veces devuelve un array de un solo elemento si la FK no es UNIQUE.
+      // Usamos este helper para asegurar que obtenemos el objeto:
+      const getFirst = (val: any) => Array.isArray(val) ? val[0] : val;
+
+      const antro = getFirst(rawData.consulta_antropometria);
+      const especialistaObj = getFirst(rawData.especialistas);
+      const perfilEsp = getFirst(especialistaObj?.perfiles);
 
       const payload = {
         consulta_id: rawData.id,
@@ -146,7 +151,7 @@ export default function PatientDashboard() {
         especialista_nombre: perfilEsp?.nombre_completo || "Especialista Nutri-Tech",
         especialista_tel: perfilEsp?.telefono || "S/N",
         motivo_consulta: rawData.motivo_consulta || "Consulta general",
-        diagnostico: rawData.diagnostico || "Sin diagnóstico",
+        diagnostico: rawData.diagnostico || "Pendiente",
         plan_alimenticio: rawData.plan_alimenticio || "Seguir indicaciones"
       };
 
