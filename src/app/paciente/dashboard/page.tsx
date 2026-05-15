@@ -104,8 +104,8 @@ export default function PatientDashboard() {
     setDownloadingId(consultaId);
     
     try {
-      // NOTA TÉCNICA: Usamos el nombre de la COLUMNA que tiene la FK 
-      // y le ponemos un alias para que sea fácil de leer.
+      // CONSULTA CORREGIDA: 
+      // Sintaxis: "nombre_deseado : nombre_columna_FK ( campos_tabla_relacionada )"
       const { data: cData, error } = await supabase
         .from('consultas')
         .select(`
@@ -114,9 +114,9 @@ export default function PatientDashboard() {
           diagnostico,
           plan_alimenticio,
           created_at,
-          antropometria:antropometria_id (peso, estatura, imc),
+          antropometria:antropometria_id ( peso, estatura, imc ),
           especialista:especialista_id (
-            perfiles:perfil_id (nombre_completo, telefono)
+            perfil:perfil_id ( nombre_completo, telefono )
           )
         `)
         .eq('id', consultaId)
@@ -127,12 +127,11 @@ export default function PatientDashboard() {
         throw new Error("No se pudieron obtener los datos de la base de datos");
       }
 
-      // Casteo a any para procesar los datos anidados
       const rawData = cData as any;
 
-      // Supabase devuelve las relaciones 1:1 como objetos directos con esta sintaxis
+      // Con el alias, accedemos directamente al objeto
       const antro = rawData.antropometria;
-      const perfilEsp = rawData.especialista?.perfiles;
+      const perfilEsp = rawData.especialista?.perfil;
 
       const payload = {
         consulta_id: rawData.id,
@@ -141,22 +140,16 @@ export default function PatientDashboard() {
         email: perfil?.email,
         sexo: perfil?.sexo,
         fecha_emision: new Date(rawData.created_at).toLocaleDateString('es-MX'),
-        
-        // Datos de antropometría
         peso: antro?.peso || "N/A",
         estatura: antro?.estatura || "N/A",
         imc: antro?.imc || "N/A",
-
-        // Datos del especialista
         especialista_nombre: perfilEsp?.nombre_completo || "Especialista Nutri-Tech",
         especialista_tel: perfilEsp?.telefono || "S/N",
-
         motivo_consulta: rawData.motivo_consulta || "Consulta general",
-        diagnostico: rawData.diagnostico || "Pendiente",
+        diagnostico: rawData.diagnostico || "Sin diagnóstico",
         plan_alimenticio: rawData.plan_alimenticio || "Seguir indicaciones"
       };
 
-      // Envío a AWS Lambda
       const response = await fetch(AWS_LAMBDA_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,16 +158,16 @@ export default function PatientDashboard() {
 
       const result = await response.json();
       
-      // Descarga del PDF
+      // Descarga automática del PDF devuelto por Lambda
       const linkSource = `data:application/pdf;base64,${result.body}`;
       const downloadLink = document.createElement("a");
       downloadLink.href = linkSource;
-      downloadLink.download = `Ficha_Nutricional_${consultaId}.pdf`;
+      downloadLink.download = `Diagnostico_${perfil?.nombre_completo}_${consultaId}.pdf`;
       downloadLink.click();
 
     } catch (err) {
       console.error("Error detallado:", err);
-      alert("Error al generar el PDF. Verifica la consola.");
+      alert("Error al generar el PDF. Revisa la consola para más detalles.");
     } finally {
       setDownloadingId(null);
     }
