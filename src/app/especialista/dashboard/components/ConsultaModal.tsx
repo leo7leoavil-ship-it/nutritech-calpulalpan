@@ -1,7 +1,5 @@
 import { ClipboardList, FileText, Sparkles, Stethoscope, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { AlertDot } from './AlertDot';
-import { Badge } from './Badge';
 import {
   AntecedentesFamiliares,
   AntecedentesPatologicos,
@@ -10,6 +8,8 @@ import {
   Perfil,
 } from '../types';
 import { fmtFecha, yearsOld } from '../utils';
+import { AlertDot } from './AlertDot';
+import { Badge } from './Badge';
 
 function DataRow({ label, value }: { label: string; value: string }) {
   const t = (value || '').trim();
@@ -97,6 +97,112 @@ export function ConsultaModal({
     consultaActual.diagnostico_especialista ?? ''
   );
   const [plan, setPlan] = useState(consultaActual.plan_alimenticio_resumen ?? '');
+  const [sugerencia, setSugerencia] = useState('');
+  const [generando, setGenerando] = useState(false);
+
+  const c = detalleVista?.consulta;
+  const a = detalleVista?.antropometria;
+  const e = detalleVista?.evaluacion;
+  const ev = detalleVista?.estilo;
+  const r = detalleVista?.recordatorio;
+
+  const LAMBDA_URL = 'https://avb2yonqnf.execute-api.us-east-2.amazonaws.com/default/SANL';
+
+  const generarSugerencia = async () => {
+    setGenerando(true);
+    setSugerencia('');
+    try {
+      const payload = {
+        paciente: {
+          sexo: paciente.sexo,
+          fecha_nacimiento: paciente.fecha_nacimiento,
+          ocupacion: paciente.ocupacion,
+        },
+        antecedentes_familiares: familiares ? {
+          diabetes_padre: familiares.diabetes_padre ?? false,
+          diabetes_madre: familiares.diabetes_madre ?? false,
+          obesidad_padre: familiares.obesidad_padre ?? false,
+          obesidad_madre: familiares.obesidad_madre ?? false,
+          hipertension_padre: familiares.hipertension_padre ?? false,
+          hipertension_madre: familiares.hipertension_madre ?? false,
+          sobrepeso_padre: familiares.sobrepeso_padre ?? false,
+          sobrepeso_madre: familiares.sobrepeso_madre ?? false,
+          tiene_alergias: familiares.tiene_alergias ?? false,
+          alergias_especificar: familiares.alergias_especificar,
+          otros_antecedentes: familiares.otros_antecedentes,
+        } : null,
+        antecedentes_patologicos: patologicos ? {
+          padece_enfermedad: patologicos.padece_enfermedad ?? false,
+          enfermedad_diagnosticada: patologicos.enfermedad_diagnosticada,
+          toma_medicamento: patologicos.toma_medicamento ?? false,
+          nombre_medicamento: patologicos.nombre_medicamento,
+          dosis: patologicos.dosis,
+        } : null,
+        antropometria: {
+          peso_kg: a?.peso_kg ?? 0,
+          talla_cm: a?.talla_cm ?? 0,
+          imc: a?.imc ?? null,
+        },
+        estilo_vida: ev ? {
+          sueno_horas: ev.sueno_horas,
+          sueno_problemas: ev.sueno_problemas,
+          actividad_fisica: ev.actividad_fisica,
+          ejercicio_frecuencia: ev.ejercicio_frecuencia,
+          ejercicio_tiempo: ev.ejercicio_tiempo,
+          practica_deporte: ev.practica_deporte,
+          tipo_deporte: ev.tipo_deporte,
+          frecuencia_deporte: ev.frecuencia_deporte,
+          tiempo_deporte: ev.tiempo_deporte,
+        } : null,
+        evaluacion_dietetica: e ? {
+          comidas_dia: e.comidas_dia,
+          agua_litros: e.agua_litros,
+          nivel_apetito: e.nivel_apetito,
+          hora_max_apetito: e.hora_max_apetito,
+          compania_comida_tipo: e.compania_comida_tipo,
+          tiempo_comida_min: e.tiempo_comida_min,
+          usa_dispositivos: e.usa_dispositivos ?? false,
+          sal_adicional: e.sal_adicional ?? false,
+          preferencias_positivas: e.preferencias_positivas,
+          preferencias_negativas: e.preferencias_negativas,
+        } : null,
+        recordatorio_24h: r ? {
+          r24_desayuno: r.r24_desayuno,
+          r24_colacion_manana: r.r24_colacion_manana,
+          r24_comida: r.r24_comida,
+          r24_colacion_tarde: r.r24_colacion_tarde,
+          r24_cena: r.r24_cena,
+          r24_extras: r.r24_extras,
+          es_dia_tipico: r.es_dia_tipico,
+          grasas_frecuentes: r.grasas_frecuentes,
+          r24_agua_litros: r.r24_agua_litros,
+        } : null,
+        motivo_consulta: consultaActual.motivo_consulta,
+      };
+
+      const res = await fetch(LAMBDA_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.text();
+      let data: Record<string, unknown>;
+      try { data = JSON.parse(body); } catch { data = {}; }
+      if (data && data.sugerencia && String(data.sugerencia).trim()) {
+        setSugerencia(String(data.sugerencia));
+      } else {
+        setSugerencia(
+          '[HTTP ' + res.status + '] ' +
+          (data.error || body || 'Respuesta inesperada (sin contenido)')
+        );
+      }
+    } catch (err) {
+      setSugerencia('Error de conexión con la IA: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setGenerando(false);
+    }
+
+  };
 
   useEffect(() => {
     setDiagnostico(consultaActual.diagnostico_especialista ?? '');
@@ -112,12 +218,6 @@ export function ConsultaModal({
   const edad = yearsOld(paciente.fecha_nacimiento);
   const registroCompleto = !!paciente.registro_completo;
   const mostrandoVistaDelHistorial = vistaEfectivaId !== consultaActual.id;
-
-  const c = detalleVista?.consulta;
-  const a = detalleVista?.antropometria;
-  const e = detalleVista?.evaluacion;
-  const ev = detalleVista?.estilo;
-  const r = detalleVista?.recordatorio;
 
   const alertas: Array<{ color: 'red' | 'amber' | 'green'; text: string }> = [];
   if (familiares?.diabetes_padre)
@@ -165,14 +265,12 @@ export function ConsultaModal({
             </p>
             <p className="text-xs mt-2">
               <span
-                className={`inline-flex items-center gap-2 ${
-                  registroCompleto ? 'text-emerald-700' : 'text-amber-700'
-                }`}
+                className={`inline-flex items-center gap-2 ${registroCompleto ? 'text-emerald-700' : 'text-amber-700'
+                  }`}
               >
                 <span
-                  className={`w-2 h-2 rounded-full ${
-                    registroCompleto ? 'bg-emerald-500' : 'bg-amber-500'
-                  }`}
+                  className={`w-2 h-2 rounded-full ${registroCompleto ? 'bg-emerald-500' : 'bg-amber-500'
+                    }`}
                 />
                 {registroCompleto ? 'Registro completo' : 'Registro incompleto'}
               </span>
@@ -309,11 +407,10 @@ export function ConsultaModal({
                 <button
                   type="button"
                   onClick={() => onConsultaVistaIdChange(null)}
-                  className={`w-full text-left rounded-2xl border p-4 shadow-sm transition-colors ${
-                    consultaVistaId == null
-                      ? 'border-emerald-400 bg-emerald-50/50 ring-1 ring-emerald-200'
-                      : 'border-gray-100 bg-white hover:bg-gray-50'
-                  }`}
+                  className={`w-full text-left rounded-2xl border p-4 shadow-sm transition-colors ${consultaVistaId == null
+                    ? 'border-emerald-400 bg-emerald-50/50 ring-1 ring-emerald-200'
+                    : 'border-gray-100 bg-white hover:bg-gray-50'
+                    }`}
                 >
                   <p className="text-xs text-gray-500">
                     {fmtFecha(consultaActual.created_at)}
@@ -338,11 +435,10 @@ export function ConsultaModal({
                       type="button"
                       key={h.id}
                       onClick={() => onConsultaVistaIdChange(h.id)}
-                      className={`w-full text-left rounded-2xl border p-4 shadow-sm transition-colors ${
-                        consultaVistaId === h.id
-                          ? 'border-emerald-400 bg-emerald-50/50 ring-1 ring-emerald-200'
-                          : 'border-gray-100 bg-white hover:bg-gray-50'
-                      }`}
+                      className={`w-full text-left rounded-2xl border p-4 shadow-sm transition-colors ${consultaVistaId === h.id
+                        ? 'border-emerald-400 bg-emerald-50/50 ring-1 ring-emerald-200'
+                        : 'border-gray-100 bg-white hover:bg-gray-50'
+                        }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -594,10 +690,33 @@ export function ConsultaModal({
                   - Ajusta el plan a preferencias, estilo de vida y recordatorio
                   24 h del paciente.
                 </p>
-                <p className="text-xs text-emerald-700 pt-2">
-                  Haz clic en una sugerencia para agregarla al plan
-                  (próximamente).
-                </p>
+                <button
+                  type="button"
+                  onClick={generarSugerencia}
+                  disabled={generando}
+                  className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generando ? 'Analizando datos...' : '✦ Generar sugerencia con IA'}
+                </button>
+                {sugerencia && (
+                  <div className="mt-3 rounded-xl bg-white border border-emerald-200 overflow-hidden">
+                    <div className="p-3 text-sm text-gray-800 whitespace-pre-wrap">
+                      {sugerencia}
+                    </div>
+                    <div className="border-t border-emerald-100 px-3 py-2 bg-emerald-50/50 flex items-center justify-between gap-2">
+                      <p className="text-xs text-emerald-700">
+                        Haz clic para agregar la sugerencia al plan alimenticio
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setPlan((prev) => prev ? prev + '\n\n' + sugerencia : sugerencia)}
+                        className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline whitespace-nowrap"
+                      >
+                        Usar sugerencia →
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
