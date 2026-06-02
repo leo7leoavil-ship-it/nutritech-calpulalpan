@@ -111,13 +111,11 @@ export default function PatientDashboard() {
         .select(`
           id,
           motivo_consulta,
-          diagnostico,
-          plan_alimenticio,
+          diagnostico_especialista,
+          plan_alimenticio_resumen,
           created_at,
-          antropometria:antropometria_id ( peso, estatura, imc ),
-          especialista:especialista_id (
-            perfil:perfil_id ( nombre_completo, telefono )
-          )
+          antropometria:antropometria_id ( peso_kg, talla_cm, imc ),
+          especialista:especialista_id ( nombre_completo, telefono )
         `)
         .eq('id', consultaId)
         .single();
@@ -129,9 +127,8 @@ export default function PatientDashboard() {
 
       const rawData = cData as any;
 
-      // Al usar alias (nombre:columna), los datos vienen simplificados como objetos
       const antro = rawData.antropometria;
-      const perfilEsp = rawData.especialista?.perfil;
+      const perfilEsp = rawData.especialista;
 
       const payload = {
         consulta_id: rawData.id,
@@ -141,19 +138,16 @@ export default function PatientDashboard() {
         sexo: perfil?.sexo,
         fecha_emision: new Date(rawData.created_at).toLocaleDateString('es-MX'),
         
-        // Datos Antropométricos
-        peso: antro?.peso || "N/A",
-        estatura: antro?.estatura || "N/A",
+        peso: antro?.peso_kg || "N/A",
+        estatura: antro?.talla_cm || "N/A",
         imc: antro?.imc || "N/A",
 
-        // Datos Especialista
         especialista_nombre: perfilEsp?.nombre_completo || "Especialista Nutri-Tech",
         especialista_tel: perfilEsp?.telefono || "S/N",
 
-        // Datos Consulta (Alineado a Lambda y DB)
         motivo_consulta: rawData.motivo_consulta || "Consulta general",
-        diagnostico: rawData.diagnostico || "Sin diagnóstico",
-        plan_alimenticio: rawData.plan_alimenticio || "Seguir indicaciones"
+        diagnostico: rawData.diagnostico_especialista || "Sin diagnóstico",
+        plan_alimenticio: rawData.plan_alimenticio_resumen || "Seguir indicaciones"
       };
 
       // Petición a la Lambda de AWS
