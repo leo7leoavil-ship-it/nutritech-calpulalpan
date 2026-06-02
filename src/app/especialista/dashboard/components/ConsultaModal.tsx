@@ -188,8 +188,8 @@ export function ConsultaModal({
       const body = await res.text();
       let data: Record<string, unknown>;
       try { data = JSON.parse(body); } catch { data = {}; }
-      if (data && data.sugerencia && String(data.sugerencia).trim()) {
-        setSugerencia(String(data.sugerencia));
+      if (data && data.respuesta && String(data.respuesta).trim()) {
+        setSugerencia(String(data.respuesta));
       } else {
         setSugerencia(
           '[HTTP ' + res.status + '] ' +
