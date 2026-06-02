@@ -49,7 +49,10 @@ export default function PatientDashboard() {
   const [consultas, setConsultas] = useState<ConsultaResumen[]>([]); // Lista de consultas del paciente
   const [loading, setLoading] = useState(true); // Estado de carga inicial
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const AWS_LAMBDA_URL = 'https://5n9fv3460m.execute-api.us-east-2.amazonaws.com/default/generador-pdf-nutritech';
+
+  // URL de la Lambda de AWS para generar PDF
+  const AWS_LAMBDA_URL = 'https://pnqnvnmrd5.execute-api.us-east-2.amazonaws.com/default/PDF_SANL';
+  //'https://5n9fv3460m.execute-api.us-east-2.amazonaws.com/default/generador-pdf-nutritech';
 
   /**
    * Efecto para cargar los datos iniciales del usuario y sus consultas
@@ -61,7 +64,7 @@ export default function PatientDashboard() {
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        
+
         if (!user) {
           // Si no hay usuario, se podría redirigir a login aquí
           return;
@@ -102,7 +105,7 @@ export default function PatientDashboard() {
   // FUNCIÓN PARA DESCARGAR PDF DE CONSULTA
   const handleDownloadPDF = async (consultaId: string) => {
     setDownloadingId(consultaId);
-    
+
     try {
       // CONSULTA CORREGIDA: Usamos el nombre de la columna FK (especialista_id)
       // para que Supabase encuentre el camino hacia la tabla especialistas.
@@ -137,7 +140,7 @@ export default function PatientDashboard() {
         email: perfil?.email,
         sexo: perfil?.sexo,
         fecha_emision: new Date(rawData.created_at).toLocaleDateString('es-MX'),
-        
+
         peso: antro?.peso_kg || "N/A",
         estatura: antro?.talla_cm || "N/A",
         imc: antro?.imc || "N/A",
@@ -158,9 +161,9 @@ export default function PatientDashboard() {
       });
 
       const result = await response.json();
-      
+
       // Descarga el PDF que devuelve la Lambda en Base64
-      const linkSource = `data:application/pdf;base64,${result.body}`;
+      const linkSource = `data:application/pdf;base64,${result.pdf}`;
       const downloadLink = document.createElement("a");
       downloadLink.href = linkSource;
       downloadLink.download = `Ficha_Nutricional_${perfil?.nombre_completo}_${consultaId}.pdf`;
@@ -197,11 +200,10 @@ export default function PatientDashboard() {
 
           {/* Badge de estado de aprobación del perfil */}
           <div
-            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${
-              perfil?.estado_aprobacion === 'aprobado'
-                ? 'bg-green-100 text-green-700'
-                : 'bg-yellow-100 text-yellow-700'
-            }`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${perfil?.estado_aprobacion === 'aprobado'
+              ? 'bg-green-100 text-green-700'
+              : 'bg-yellow-100 text-yellow-700'
+              }`}
           >
             {perfil?.estado_aprobacion === 'aprobado' ? (
               <CheckCircle2 size={18} />
@@ -228,7 +230,7 @@ export default function PatientDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* --- Columna Lateral: Información Personal --- */}
         <section className="lg:col-span-1 space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -267,7 +269,7 @@ export default function PatientDashboard() {
 
         {/* --- Columna Principal: Acciones y Actividad --- */}
         <section className="lg:col-span-2 space-y-6">
-          
+
           {/* Alerta de cuenta pendiente de revisión */}
           {perfil?.estado_aprobacion === 'pendiente' && (
             <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 items-start">
@@ -334,11 +336,11 @@ export default function PatientDashboard() {
                   // Formateamos la fecha a un estilo legible para México (ej. 14 may 2026, 08:30)
                   const fecha = c.created_at
                     ? new Date(c.created_at).toLocaleString('es-MX', {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })
                     : '';
-                    
+
                   // Variable booleana para saber si la consulta ya fue finalizada/atendida
                   const atendida = c.status === 'atendida';
 
@@ -357,14 +359,13 @@ export default function PatientDashboard() {
 
                       {/* LADO DERECHO (CONTENEDOR FLEX): Agrupa el Badge de estado y el Botón de PDF */}
                       <div className="flex items-center gap-3">
-                        
+
                         {/* BADGE DE ESTADO: Cambia de color verde si está atendida o ámbar si está pendiente */}
                         <span
-                          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                            atendida
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
+                          className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${atendida
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-amber-100 text-amber-800'
+                            }`}
                         >
                           {/* Ícono dinámico según el estado */}
                           {atendida ? <CheckCircle2 size={14} /> : <Clock size={14} />}
