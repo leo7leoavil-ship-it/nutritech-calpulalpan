@@ -682,14 +682,7 @@ export function ConsultaModal({
                 </p>
               </div>
               <div className="p-4 text-sm text-emerald-900 space-y-2">
-                <p className="leading-relaxed">
-                  - Revisa el motivo, antecedentes y el formulario (columna
-                  izquierda) para validar criterios clínicos.
-                </p>
-                <p className="leading-relaxed">
-                  - Ajusta el plan a preferencias, estilo de vida y recordatorio
-                  24 h del paciente.
-                </p>
+                
                 <button
                   type="button"
                   onClick={generarSugerencia}
