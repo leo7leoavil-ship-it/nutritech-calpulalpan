@@ -50,9 +50,7 @@ export default function PatientDashboard() {
   const [loading, setLoading] = useState(true); // Estado de carga inicial
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // URL de la Lambda de AWS para generar PDF
   const AWS_LAMBDA_URL = 'https://pnqnvnmrd5.execute-api.us-east-2.amazonaws.com/default/PDF_SANL';
-  //'https://5n9fv3460m.execute-api.us-east-2.amazonaws.com/default/generador-pdf-nutritech';
 
   /**
    * Efecto para cargar los datos iniciales del usuario y sus consultas
@@ -153,10 +151,9 @@ export default function PatientDashboard() {
         plan_alimenticio: rawData.plan_alimenticio_resumen || "Seguir indicaciones"
       };
 
-      // Petición a la Lambda de AWS
       const response = await fetch(AWS_LAMBDA_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload),
       });
 
